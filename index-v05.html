@@ -1,0 +1,252 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101827">
+<title>ClearCue AI — Version 0.5</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0b1220;color:#f3f6fb;font:16px/1.5 system-ui,sans-serif}
+main{max-width:500px;margin:auto;padding:22px 17px}
+header{display:flex;justify-content:space-between;align-items:center}
+.logo{background:#8ce0c0;color:#10221e;padding:9px 13px;border-radius:12px;font-weight:bold}
+.tag,.pill{color:#8ce0c0;border:1px solid #477d70;border-radius:20px;padding:5px 9px;font-size:12px}
+h1{font-size:34px;line-height:1.1;margin-top:35px}
+p,.muted{color:#9cabc0}
+.card{background:#152238;border:1px solid #2b3b52;border-radius:18px;padding:16px;margin:16px 0}
+textarea{width:100%;min-height:130px;padding:13px;border-radius:12px;border:1px solid #35465d;background:#0d1726;color:white;font:inherit}
+button{border:0;border-radius:12px;padding:12px;background:#8ce0c0;color:#10221e;font-weight:bold;cursor:pointer}
+.primary{width:100%;margin-top:12px}
+.secondary{background:#26364b;color:white}
+.task{padding:14px 0;border-bottom:1px solid #35465d}
+.task:last-child{border:0}
+.taskhead{display:flex;gap:10px;align-items:flex-start}
+.taskhead input{width:20px;margin-top:5px}
+.taskname{flex:1;overflow-wrap:anywhere}
+.done{text-decoration:line-through;opacity:.55}
+.delete{background:#49303a;color:#ffd4d4;padding:7px 10px;font-size:12px}
+.small{font-size:12px;color:#9cabc0}
+.status{display:inline-block;padding:4px 8px;border-radius:8px;font-size:11px;margin:5px 0}
+.certain{background:#173e35;color:#9ce8cc}
+.uncertain{background:#493b20;color:#ffe0a0}
+.notice{font-size:13px;background:#202e43;padding:12px;border-radius:12px}
+footer{text-align:center;color:#8291a5;font-size:11px;margin-top:30px}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div class="logo">C · ClearCue AI</div>
+<span class="tag">VERSION 0.5</span>
+</header>
+
+<h1>Understand your tasks better.</h1>
+<p>ClearCue identifies possible actions, deadlines and uncertainty in everyday messages.</p>
+
+<section class="card">
+<h3>Capture a message</h3>
+<textarea id="message" placeholder="Example: I might call Sarah tomorrow. Please submit the application by Friday."></textarea>
+<button class="primary" onclick="extract()">Analyse message</button>
+<p class="small">Review every suggestion before relying on it.</p>
+</section>
+
+<section class="card">
+<h3>Detected tasks <span class="pill" id="count">0 tasks</span></h3>
+<div id="taskList"></div>
+<p id="empty" class="muted">Your tasks will appear here.</p>
+<button class="secondary" onclick="clearCompleted()">Clear completed</button>
+</section>
+
+<section class="card">
+<h3>How ClearCue decides</h3>
+<p class="notice">ClearCue uses phrase-matching rules in this prototype. It can misunderstand complex sentences, so always check the original source.</p>
+</section>
+
+<footer>CLEARCUE AI · VERSION 0.5<br>Rule-based prototype · No external AI service</footer>
+</main>
+
+<script>
+const KEY = "clearcue_tasks_v05";
+
+const verbs = [
+"pay","call","phone","email","send","submit","buy","collect",
+"book","schedule","meet","visit","finish","complete","prepare",
+"bring","renew","check","reply","contact","attend","read","write",
+"upload","download","arrange","remind","register","confirm",
+"deliver","organise","organize","apply","return","pick up",
+"drop off","print","sign","review","discuss","cancel","order"
+];
+
+let tasks = [];
+
+try {
+  const saved = JSON.parse(localStorage.getItem(KEY) || "[]");
+  if (Array.isArray(saved)) tasks = saved;
+} catch {
+  tasks = [];
+}
+
+function escapeHTML(value) {
+  return String(value).replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",
+    '"':"&quot;","'":"&#39;"
+  })[c]);
+}
+
+function hasVerb(sentence) {
+  return verbs.some(v =>
+    new RegExp("\\b" + v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i").test(sentence)
+  );
+}
+
+function isNegated(sentence) {
+  return /\b(don't|do not|doesn't|does not|never|don't need to|do not need to|mustn't|must not|shouldn't|should not|avoid)\b/i.test(sentence);
+}
+
+function isUncertain(sentence) {
+  return /\b(might|may|maybe|could|possibly|perhaps|if|depending on|not sure|probably|might have to|may need to)\b/i.test(sentence);
+}
+
+function findDeadline(sentence) {
+  const patterns = [
+    /\b(today|tomorrow|tonight|this evening|this afternoon)\b/i,
+    /\b(next week|next month|this week|this month|end of the month|end of the week)\b/i,
+    /\b(by|before|until|on|due|deadline is)\s+(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b/i,
+    /\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b/i,
+    /\b(?:by|before|on|until)\s+\d{1,2}(?:st|nd|rd|th)?(?:\s+of)?\s+[A-Za-z]+\b/i,
+    /\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\b/i,
+    /\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/
+  ];
+
+  for (const pattern of patterns) {
+    const match = sentence.match(pattern);
+    if (match) return match[0];
+  }
+
+  return "No clear deadline detected";
+}
+
+function splitMessage(message) {
+  return message.replace(/\n+/g, ". ")
+    .split(/(?<=[.!?])\s+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+function extract() {
+  const message = document.getElementById("message").value.trim();
+
+  if (!message) {
+    alert("Please enter a message first.");
+    return;
+  }
+
+  const sentences = splitMessage(message);
+  let added = 0;
+  let ignored = 0;
+
+  sentences.forEach(sentence => {
+    if (!hasVerb(sentence)) return;
+
+    if (isNegated(sentence)) {
+      ignored++;
+      return;
+    }
+
+    const uncertain = isUncertain(sentence);
+    const deadline = findDeadline(sentence);
+
+    const title = sentence
+      .replace(/[.!?]+$/, "")
+      .trim();
+
+    const duplicate = tasks.some(t =>
+      t.source.toLowerCase() === sentence.toLowerCase()
+    );
+
+    if (duplicate) return;
+
+    tasks.unshift({
+      id: Date.now().toString() + Math.random().toString(16).slice(2),
+      title: title,
+      source: sentence,
+      deadline: deadline,
+      uncertain: uncertain,
+      done: false
+    });
+
+    added++;
+  });
+
+  save();
+
+  document.getElementById("message").value = "";
+
+  if (added === 0 && ignored > 0) {
+    alert("No tasks were saved because the action wording appeared to be negative. Please check the message.");
+  } else if (added === 0) {
+    alert("No new tasks were detected. Try a clearer action sentence.");
+  } else {
+    alert(added + " suggestion(s) added. " + ignored + " negative instruction(s) ignored. Please review your tasks.");
+  }
+}
+
+function save() {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(tasks));
+    render();
+  } catch {
+    alert("Your browser could not save the tasks.");
+  }
+}
+
+function toggleTask(id) {
+  const task = tasks.find(t => t.id === id);
+  if (task) {
+    task.done = !task.done;
+    save();
+  }
+}
+
+function deleteTask(id) {
+  tasks = tasks.filter(t => t.id !== id);
+  save();
+}
+
+function clearCompleted() {
+  tasks = tasks.filter(t => !t.done);
+  save();
+}
+
+function render() {
+  const list = document.getElementById("taskList");
+  document.getElementById("count").textContent =
+    tasks.length + (tasks.length === 1 ? " task" : " tasks");
+
+  document.getElementById("empty").hidden = tasks.length > 0;
+
+  list.innerHTML = tasks.map(t => `
+    <div class="task">
+      <div class="taskhead">
+        <input type="checkbox" ${t.done ? "checked" : ""}
+          onchange="toggleTask('${t.id}')">
+        <div class="taskname ${t.done ? "done" : ""}">
+          <strong>${escapeHTML(t.title)}</strong><br>
+          <span class="status ${t.uncertain ? "uncertain" : "certain"}">
+            ${t.uncertain ? "Needs confirmation" : "Possible action"}
+          </span>
+          <div class="small">Deadline: ${escapeHTML(t.deadline)}</div>
+          <div class="small">Source: ${escapeHTML(t.source)}</div>
+        </div>
+        <button class="delete" onclick="deleteTask('${t.id}')">Delete</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+render();
+</script>
+</body>
+</html>
