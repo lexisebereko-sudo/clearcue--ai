@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101827"><meta name="description" content="ClearCue helps turn everyday messages and information into clear next steps."><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="icon-192.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>ClearCue AI — Demo</title>
+<style>
+:root{--bg:#0b1220;--panel:#121d2e;--panel2:#1a2940;--ink:#f3f6fb;--muted:#9cabc0;--accent:#8ce0c0;--accent2:#c6f4e4;--line:#2b3b52;--warn:#f4cf83}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 85% 0%,#203b4b 0,#0b1220 38%);color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}.app{max-width:460px;margin:auto;min-height:100vh;padding:20px 17px 34px;display:flex;flex-direction:column}.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:25px}.brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.2px}.logo{width:36px;height:36px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#5aa8d2);display:grid;place-items:center;color:#10202a;font-weight:900}.tag{font-size:11px;color:var(--accent);border:1px solid #477d70;border-radius:30px;padding:5px 9px}.screen{display:none;animation:fade .2s ease}.screen.active{display:block}@keyframes fade{from{opacity:.3;transform:translateY(5px)}to{opacity:1;transform:none}}h1{font-size:34px;line-height:1.08;margin:8px 0 14px;letter-spacing:-1px}h2{font-size:23px;margin:8px 0 8px}p{color:var(--muted);margin:0 0 17px}.eyebrow{color:var(--accent);font-size:12px;text-transform:uppercase;letter-spacing:1.5px;font-weight:800}.card{background:linear-gradient(160deg,#17263a,#111b2b);border:1px solid var(--line);border-radius:20px;padding:17px;margin:16px 0}.hero{padding:23px 19px;background:linear-gradient(145deg,#1b3441,#17253a 65%,#162033);border:1px solid #355566;border-radius:24px;margin:22px 0}.heroicon{font-size:38px;margin-bottom:15px}.btn{width:100%;border:0;border-radius:14px;padding:15px 16px;font-size:15px;font-weight:800;background:var(--accent);color:#10221e;cursor:pointer;margin-top:10px}.btn.secondary{background:var(--panel2);border:1px solid var(--line);color:var(--ink)}.btn:active{transform:scale(.99)}label{display:block;font-size:13px;color:var(--muted);margin:13px 0 7px}select,textarea,input{width:100%;border:1px solid var(--line);border-radius:13px;background:#0d1726;color:var(--ink);padding:14px;font:inherit;outline:none}textarea{min-height:145px;resize:vertical}select:focus,textarea:focus{border-color:var(--accent)}.small{font-size:12px;color:var(--muted)}.steps{display:flex;gap:6px;margin:0 0 20px}.steps span{height:4px;flex:1;background:#26364b;border-radius:10px}.steps span.on{background:var(--accent)}.task{display:flex;gap:11px;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--line)}.task:last-child{border:0}.task input{width:19px;height:19px;margin:3px 0 0;accent-color:var(--accent)}.task strong{display:block;font-size:15px}.task small{display:block;color:var(--muted);margin-top:3px}.pill{display:inline-block;font-size:11px;padding:4px 8px;border-radius:20px;background:#243a48;color:var(--accent2);margin-top:7px}.pill.warn{background:#473a25;color:var(--warn)}.source{font-size:12px;color:#c5d2e2;background:#0d1726;padding:12px;border-radius:12px;margin:12px 0}.row{display:flex;gap:9px}.row .btn{flex:1}.footer{margin-top:auto;text-align:center;color:#72839a;font-size:11px;padding-top:24px}.back{background:none;border:0;color:var(--accent);font:inherit;padding:0;margin:0 0 12px;cursor:pointer}.done{text-decoration:line-through;opacity:.55}.notice{background:#253344;border:1px solid #3c526a;border-radius:12px;padding:12px;font-size:12px;color:#c3d0df;margin-top:14px}
+</style>
+</head>
+<body><main class="app">
+<header class="top"><div class="brand"><div class="logo">C</div><span>ClearCue AI</span></div><button id="installBtn" class="tag" type="button" hidden style="background:transparent;cursor:pointer">Install app</button><span id="demoTag" class="tag">DEMO 0.1</span></header>
+<section id="welcome" class="screen active">
+ <div class="eyebrow">Your everyday action assistant</div>
+ <h1>Less confusion.<br>More things done.</h1>
+ <p>Turn messages and everyday information into clear next steps.</p>
+ <div class="hero"><div class="heroicon">✦</div><h2>Understand what matters.</h2><p style="margin-bottom:0">ClearCue helps organise requests, dates and tasks so important details are easier to follow.</p></div>
+ <label for="lang0">Choose your language</label><select id="lang0"><option>English</option><option>Setswana</option><option>French</option><option>Spanish</option><option>Swahili</option></select>
+ <button class="btn" onclick="go('capture')">Get started →</button>
+ <div class="notice">Prototype note: this demo uses sample AI results. It does not send or store your messages on a server.</div>
+</section>
+<section id="capture" class="screen">
+ <button class="back" onclick="go('welcome')">← Back</button><div class="steps"><span class="on"></span><span></span><span></span></div>
+ <div class="eyebrow">Step 1 · Capture</div><h1>What do you need help organising?</h1><p>Paste a message, note or instructions below. Try the sample if you want to see how ClearCue works.</p>
+ <label for="lang">Output language</label><select id="lang"><option>English</option><option>Setswana</option><option>French</option><option>Spanish</option><option>Swahili</option></select>
+ <label for="message">Your message</label><textarea id="message" placeholder="Paste a message here…"></textarea>
+ <button class="btn secondary" onclick="sample()">Try a sample message</button><button class="btn" onclick="analyse()">Find my action items →</button>
+ <p class="small" style="margin-top:12px">For this demo, use fictional or non-sensitive information.</p>
+</section>
+<section id="results" class="screen">
+ <button class="back" onclick="go('capture')">← Edit message</button><div class="steps"><span class="on"></span><span class="on"></span><span></span></div>
+ <div class="eyebrow">Step 2 · Understand</div><h1>Here's what matters.</h1><p>Review each action. ClearCue should never guess a missing deadline.</p>
+ <div class="source"><strong>Original message</strong><div id="sourceText" style="margin-top:5px"></div></div>
+ <div class="card" style="margin-top:14px"><div style="display:flex;justify-content:space-between;align-items:center"><strong>Action items</strong><span class="pill" id="count">3 found</span></div><div id="tasks"></div></div>
+ <div class="notice">Demo behaviour: these sample action cards are pre-written. Real AI extraction will be connected after the workflow is validated.</div>
+ <button class="btn" onclick="go('today')">Add to my action list →</button>
+</section>
+<section id="today" class="screen">
+ <button class="back" onclick="go('results')">← Back to results</button><div class="steps"><span class="on"></span><span class="on"></span><span class="on"></span></div>
+ <div class="eyebrow">Step 3 · Follow through</div><h1>Your action list.</h1><p>Tick items off as you complete them. This list is only held in this demo page.</p>
+ <div class="card"><div style="display:flex;justify-content:space-between"><strong>My actions</strong><span class="pill" id="progress">0 / 3 done</span></div><div id="finalTasks"></div></div>
+ <button class="btn secondary" onclick="resetDemo()">Start another example</button>
+ <div class="notice">Next development milestone: save tasks between app sessions, add reminders, and connect a real multilingual AI service with your approval.</div>
+</section>
+<footer class="footer">CLEARCUE AI · EARLY CONCEPT PROTOTYPE<br>Not a finished AI product</footer>
+</main>
+<script>
+let items=[];let currentMessage='';
+const demoItems=[
+ {title:'Pay the electricity bill',detail:'Due Friday · The message explicitly mentions Friday.',status:'Deadline detected',warn:false},
+ {title:'Call your aunt',detail:'Saturday is mentioned, but the call deadline is unclear.',status:'Confirm timing',warn:true},
+ {title:'Send the documents',detail:'No deadline or recipient is specified.',status:'Needs clarification',warn:true}
+];
+function go(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');window.scrollTo(0,0);}
+document.getElementById('lang0').addEventListener('change',e=>document.getElementById('lang').value=e.target.value);
+function sample(){document.getElementById('message').value='Hey, please remember the electricity bill is due Friday, and your aunt wants you to call her about Saturday. Also, don’t forget to send those documents.';}
+function analyse(){let m=document.getElementById('message').value.trim();if(!m){alert('Please paste a message or try the sample first.');return;}currentMessage=m;items=demoItems.map(x=>({...x,done:false}));document.getElementById('sourceText').textContent=m;renderTasks();go('results');}
+function renderTasks(){let html=items.map((x,i)=>`<div class="task"><input type="checkbox" aria-label="Select task ${i+1}" ${x.done?'checked':''} onchange="toggle(${i},this.checked)"><div><strong>${esc(x.title)}</strong><small>${esc(x.detail)}</small><span class="pill ${x.warn?'warn':''}">${esc(x.status)}</span></div></div>`).join('');document.getElementById('tasks').innerHTML=html;document.getElementById('finalTasks').innerHTML=items.map((x,i)=>`<div class="task"><input type="checkbox" ${x.done?'checked':''} onchange="toggle(${i},this.checked)"><div class="${x.done?'done':''}"><strong>${esc(x.title)}</strong><small>${esc(x.detail)}</small></div></div>`).join('');document.getElementById('count').textContent=items.length+' found';let n=items.filter(x=>x.done).length;document.getElementById('progress').textContent=n+' / '+items.length+' done';}
+function toggle(i,v){items[i].done=v;renderTasks();}
+function resetDemo(){items=[];document.getElementById('message').value='';go('capture');}
+function esc(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+let installPrompt=null;const installBtn=document.getElementById('installBtn');window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;installBtn.hidden=false;});installBtn.addEventListener('click',async()=>{if(!installPrompt){alert('On iPhone, use Share → Add to Home Screen. On Android, use your browser menu → Install app or Add to Home screen.');return;}installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;installBtn.hidden=true;});window.addEventListener('appinstalled',()=>{installBtn.hidden=true;});if('serviceWorker' in navigator && location.protocol.startsWith('http')){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));}
+</script></body></html>
