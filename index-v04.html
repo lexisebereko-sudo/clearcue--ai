@@ -1,0 +1,207 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101827">
+<title>ClearCue AI — Version 0.4</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0b1220;color:#f3f6fb;font:16px/1.5 system-ui,sans-serif}
+main{max-width:480px;margin:auto;padding:22px 17px}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:30px}
+.logo{background:#8ce0c0;color:#10221e;padding:9px 13px;border-radius:12px;font-weight:bold}
+.tag,.pill{color:#8ce0c0;border:1px solid #477d70;border-radius:20px;padding:5px 9px;font-size:12px}
+h1{font-size:34px;line-height:1.1}
+p,.muted{color:#9cabc0}
+.card{background:#152238;border:1px solid #2b3b52;border-radius:18px;padding:16px;margin:16px 0}
+textarea,input{width:100%;padding:13px;border-radius:12px;border:1px solid #35465d;background:#0d1726;color:white;font:inherit}
+textarea{min-height:120px}
+button{border:0;border-radius:12px;padding:13px;background:#8ce0c0;color:#10221e;font-weight:bold;font-size:15px;cursor:pointer}
+.primary{width:100%;margin-top:12px}
+.secondary{background:#26364b;color:white}
+.task{padding:13px 0;border-bottom:1px solid #35465d}
+.task:last-child{border:0}
+.taskhead{display:flex;gap:10px;align-items:flex-start}
+.taskhead input{width:20px;margin-top:5px}
+.taskname{flex:1;overflow-wrap:anywhere}
+.done{text-decoration:line-through;opacity:.55}
+.delete{background:#49303a;color:#ffd4d4;padding:7px 10px;font-size:12px}
+.small{font-size:12px;color:#9cabc0}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.actions button{flex:1}
+footer{text-align:center;color:#8291a5;font-size:11px;margin-top:35px}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div class="logo">C · ClearCue AI</div>
+<span class="tag">VERSION 0.4</span>
+</header>
+
+<h1>Less confusion.<br>More things done.</h1>
+<p>Turn everyday messages into tasks you can save and manage.</p>
+
+<section class="card">
+<h3>Capture a message</h3>
+<p class="small">Paste a message containing things you need to do.</p>
+<textarea id="message" placeholder="Example: Please call Sarah tomorrow and submit the application by Friday."></textarea>
+<button class="primary" onclick="extract()">Find my tasks</button>
+</section>
+
+<section class="card">
+<h3>My saved tasks <span class="pill" id="count">0 tasks</span></h3>
+<div id="taskList"></div>
+<p class="small" id="empty">Your saved tasks will appear here.</p>
+<div class="actions">
+<button class="secondary" onclick="clearCompleted()">Clear completed</button>
+<button class="secondary" onclick="clearAll()">Clear all</button>
+</div>
+</section>
+
+<div class="card">
+<h3>How saving works</h3>
+<p class="small">Your tasks are stored in this browser on this device. They remain after you close and reopen the page, but they do not sync to other devices.</p>
+</div>
+
+<footer>CLEARCUE AI · EARLY PROTOTYPE 0.4<br>Rule-based task suggestions · Review tasks before relying on them</footer>
+</main>
+
+<script>
+const KEY = "clearcue_tasks_v04";
+let tasks = [];
+
+try {
+  tasks = JSON.parse(localStorage.getItem(KEY) || "[]");
+  if (!Array.isArray(tasks)) tasks = [];
+} catch {
+  tasks = [];
+}
+
+function save() {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(tasks));
+    render();
+  } catch {
+    alert("Your browser could not save the tasks. Check your device storage settings.");
+  }
+}
+
+function extract() {
+  const message = document.getElementById("message").value.trim();
+  if (!message) {
+    alert("Please enter a message first.");
+    return;
+  }
+
+  const clauses = message.replace(/\n+/g, ". ")
+    .split(/(?<=[.!?])\s+|\s+(?:and also|also|then|and)\s+/i)
+    .map(x => x.trim()).filter(Boolean);
+
+  const verbs = [
+    "pay","call","phone","email","send","submit","buy",
+    "collect","book","schedule","meet","visit","finish",
+    "complete","prepare","bring","renew","check","reply",
+    "contact","attend","read","write","upload","download"
+  ];
+
+  let added = 0;
+
+  clauses.forEach(clause => {
+    const found = verbs.some(v =>
+      new RegExp("\\b" + v + "\\b", "i").test(clause)
+    );
+
+    if (!found) return;
+
+    const title = clause.replace(
+      /^(please|kindly|also|then|remember to|don't forget to)\s+/i, ""
+    ).replace(/[.!?]+$/, "").trim();
+
+    if (!title || tasks.some(t => t.title.toLowerCase() === title.toLowerCase())) return;
+
+    const dateMatch = clause.match(
+      /\b(today|tomorrow|tonight|next week|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}(?:st|nd|rd|th)?\s+\w+)\b/i
+    );
+
+    tasks.unshift({
+      id: Date.now().toString() + Math.random().toString(16).slice(2),
+      title: title.charAt(0).toUpperCase() + title.slice(1),
+      date: dateMatch ? dateMatch[0] : "No clear date detected",
+      source: clause,
+      done: false
+    });
+
+    added++;
+  });
+
+  if (!added) {
+    alert("No new clear action was detected. Try a sentence with an action such as 'Please call Sam tomorrow.'");
+  } else {
+    document.getElementById("message").value = "";
+    save();
+    alert(added + " task(s) saved!");
+  }
+}
+
+function toggleTask(id) {
+  const task = tasks.find(t => t.id === id);
+  if (task) {
+    task.done = !task.done;
+    save();
+  }
+}
+
+function deleteTask(id) {
+  tasks = tasks.filter(t => t.id !== id);
+  save();
+}
+
+function clearCompleted() {
+  tasks = tasks.filter(t => !t.done);
+  save();
+}
+
+function clearAll() {
+  if (!confirm("Delete all saved tasks?")) return;
+  tasks = [];
+  save();
+}
+
+function render() {
+  const list = document.getElementById("taskList");
+  document.getElementById("count").textContent =
+    tasks.length + (tasks.length === 1 ? " task" : " tasks");
+  document.getElementById("empty").hidden = tasks.length > 0;
+
+  list.innerHTML = tasks.map(t => `
+    <div class="task">
+      <div class="taskhead">
+        <input type="checkbox" ${t.done ? "checked" : ""}
+          aria-label="Mark task complete"
+          onchange="toggleTask('${t.id}')">
+        <div class="taskname ${t.done ? "done" : ""}">
+          <strong>${escapeHTML(t.title)}</strong>
+          <div class="small">${escapeHTML(t.date)}</div>
+          <div class="small">Source: ${escapeHTML(t.source)}</div>
+        </div>
+        <button class="delete" onclick="deleteTask('${t.id}')">Delete</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+function escapeHTML(value) {
+  return String(value).replace(/[&<>"']/g, c => ({
+    "&":"&amp;", "<":"&lt;", ">":"&gt;",
+    '"':"&quot;", "'":"&#39;"
+  })[c]);
+}
+
+render();
+</script>
+</body>
+</html>
+  
