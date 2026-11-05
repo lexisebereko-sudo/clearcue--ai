@@ -1,0 +1,377 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClearCue AI V0.14</title>
+<style>
+:root{--bg:#101827;--panel:#1b2940;--text:#f4f7fb;--muted:#aab8cc;--accent:#65d6bd;--line:#34445d}
+*{box-sizing:border-box}
+body{margin:0;padding:15px;background:var(--bg);color:var(--text);font-family:Arial,sans-serif}
+header{text-align:center;padding:18px 0}
+h1{color:var(--accent);margin:0}
+header p,.muted{color:var(--muted)}
+main{max-width:850px;margin:auto}
+.panel{background:var(--panel);padding:17px;border-radius:13px;margin:14px 0}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:var(--bg);padding:13px;border-radius:9px;text-align:center}
+.stat strong{display:block;font-size:23px;color:var(--accent)}
+.stat span{font-size:12px;color:var(--muted)}
+textarea,input,select{width:100%;padding:12px;margin:6px 0 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:white;font-size:15px}
+textarea{min-height:90px}
+button{border:0;border-radius:8px;padding:11px 14px;margin:3px;background:var(--accent);color:#10221f;font-weight:bold;cursor:pointer}
+.secondary{background:#34445d;color:white}
+.danger{background:#a34455;color:white}
+.task{background:var(--bg);padding:13px;border:1px solid var(--line);border-radius:10px;margin:10px 0}
+.task.done{opacity:.6}
+.task.done .task-title{text-decoration:line-through}
+.task-title{font-weight:bold;overflow-wrap:anywhere}
+.meta{font-size:12px;color:var(--muted);margin:7px 0}
+.tag{display:inline-block;background:#34445d;padding:4px 8px;border-radius:15px;font-size:11px;margin:3px}
+.alert{color:#ffd27a}
+.good{color:var(--accent)}
+.actions{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.small{font-size:12px;padding:7px 10px}
+.progress{height:9px;background:#34445d;border-radius:10px;overflow:hidden}
+.progress div{height:100%;background:var(--accent)}
+footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
+</style>
+</head>
+<body>
+<header>
+<h1>ClearCue AI</h1>
+<p>Less confusion. More things done.</p>
+<span class="tag">Version 0.14 — Smarter Reminders</span>
+</header>
+
+<main>
+<section class="panel">
+<h2>Dashboard</h2>
+<div class="stats">
+<div class="stat"><strong id="total">0</strong><span>Total tasks</span></div>
+<div class="stat"><strong id="pending">0</strong><span>Pending</span></div>
+<div class="stat"><strong id="completed">0</strong><span>Completed</span></div>
+</div>
+<p class="meta">Tasks due today: <strong id="dueToday">0</strong></p>
+<p class="meta">Overdue tasks: <strong id="overdue">0</strong></p>
+<p class="meta">Overall progress</p>
+<div class="progress"><div id="progressBar" style="width:0%"></div></div>
+<p id="progressText" class="meta">0% completed</p>
+</section>
+
+<section class="panel">
+<h2>Quick Capture</h2>
+<p class="muted">Enter an instruction in English or Setswana.</p>
+<textarea id="capture" placeholder="Example: Submit my application by Friday."></textarea>
+<button onclick="analyse()">Find tasks</button>
+<div id="suggestions"></div>
+</section>
+
+<section class="panel">
+<h2>Reminder Settings</h2>
+<p id="permissionStatus" class="muted">Notification permission has not been requested.</p>
+<button onclick="requestPermission()">Enable browser notifications</button>
+<p class="meta">Notifications can be limited by browser and device settings. This prototype checks reminders while the app is open.</p>
+</section>
+
+<section class="panel">
+<h2>My Tasks and Reminders</h2>
+<input id="search" placeholder="Search tasks..." oninput="render()">
+<select id="filter" onchange="render()">
+<option value="All">All tasks</option>
+<option value="Pending">Pending</option>
+<option value="Completed">Completed</option>
+<option value="Due">Due today</option>
+<option value="Overdue">Overdue</option>
+</select>
+<div id="taskList"></div>
+<button class="secondary" onclick="clearCompleted()">Clear completed</button>
+</section>
+
+<section class="panel">
+<h2>Reminder Information</h2>
+<p class="muted">A reminder becomes due at its saved date and time. If no time is entered, the default is 9:00 AM.</p>
+<p class="muted">Browser notifications require permission. They are not guaranteed when this page is closed or the device is offline.</p>
+<p class="muted">Your tasks are stored locally in this browser.</p>
+</section>
+</main>
+
+<footer>ClearCue AI V0.14 · Reminder prototype</footer>
+
+<script>
+const KEY="clearcue_tasks_v014";
+let tasks=[];
+
+try{
+ const saved=localStorage.getItem(KEY);
+ if(saved) tasks=JSON.parse(saved)||[];
+ else{
+  const previous=localStorage.getItem("clearcue_tasks_v013");
+  if(previous) tasks=JSON.parse(previous)||[];
+ }
+}catch(e){tasks=[];}
+
+tasks=tasks.map(t=>({
+ ...t,
+ id:t.id||Date.now()+Math.random(),
+ text:t.text||"Untitled task",
+ completed:!!t.completed,
+ date:t.date||(
+  /^\d{4}-\d{2}-\d{2}$/.test(t.deadline||"")?t.deadline:""
+ ),
+ time:t.time||"",
+ reminderSent:!!t.reminderSent
+}));
+
+function save(){
+ localStorage.setItem(KEY,JSON.stringify(tasks));
+ render();
+}
+
+function today(){
+ const d=new Date();
+ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+
+function dueDate(t){
+ if(t.date)return t.date;
+ const phrase=(t.deadline||"").toLowerCase();
+ const d=new Date();
+ if(phrase==="today")return today();
+ if(phrase==="tomorrow"){
+  d.setDate(d.getDate()+1);
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+ }
+ const days=["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+ const target=days.indexOf(phrase);
+ if(target>=0){
+  let difference=(target-d.getDay()+7)%7;
+  if(difference===0)difference=7;
+  d.setDate(d.getDate()+difference);
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+ }
+ return "";
+}
+
+function dueMoment(t){
+ const date=dueDate(t);
+ if(!date)return null;
+ const time=/^\d{2}:\d{2}$/.test(t.time||"")?t.time:"09:00";
+ return new Date(date+"T"+time+":00");
+}
+
+function isDueToday(t){
+ return !t.completed&&dueDate(t)===today();
+}
+
+function isOverdue(t){
+ const moment=dueMoment(t);
+ return !t.completed&&moment&&moment.getTime()<Date.now();
+}
+
+function requestPermission(){
+ if(!("Notification" in window)){
+  alert("This browser does not support notifications.");
+  return;
+ }
+ Notification.requestPermission().then(updatePermission);
+}
+
+function updatePermission(){
+ const status=document.getElementById("permissionStatus");
+ if(!("Notification" in window)){
+  status.textContent="Notifications are not supported by this browser.";
+ }else if(Notification.permission==="granted"){
+  status.textContent="Browser notifications are enabled.";
+ }else if(Notification.permission==="denied"){
+  status.textContent="Notifications are blocked. Check your browser settings.";
+ }else{
+  status.textContent="Notification permission has not been granted.";
+ }
+}
+
+function checkReminders(){
+ if(!("Notification" in window)||Notification.permission!=="granted")return;
+ const now=Date.now();
+ let changed=false;
+ tasks.forEach(t=>{
+  const moment=dueMoment(t);
+  if(!t.completed&&!t.reminderSent&&moment&&moment.getTime()<=now&&now-moment.getTime()<24*60*60*1000){
+   try{
+    new Notification("ClearCue AI reminder",{body:t.text});
+    t.reminderSent=true;
+    changed=true;
+   }catch(e){}
+  }
+ });
+ if(changed)localStorage.setItem(KEY,JSON.stringify(tasks));
+}
+
+function analyse(){
+ const input=document.getElementById("capture").value.trim();
+ const area=document.getElementById("suggestions");
+ area.innerHTML="";
+ if(!input){area.textContent="Enter a message first.";return;}
+ const sentences=input.split(/[\n.!?]+/).map(s=>s.trim()).filter(Boolean);
+ const action=/\b(submit|send|pay|call|attend|complete|finish|collect|prepare|buy|book|visit|study|revise|write|apply|register|renew|remember to|don't forget to)\b/i;
+ const setswana=/\b(ke tshwanetse go|re tshwanetse go|o tshwanetse go|ba tshwanetse go|gakologelwa go|duela|romela|ithuta|kwala|fetsa)\b/i;
+ const negative=/\b(don't|do not|doesn't|never|not yet|can't|cannot)\b/i;
+ const uncertain=/\b(might|maybe|may|possibly|could|perhaps)\b/i;
+ const found=sentences.filter(s=>(action.test(s)||setswana.test(s))&&!negative.test(s));
+ if(!found.length){area.textContent="No clear tasks detected.";return;}
+ found.forEach(s=>{
+  const card=document.createElement("div");
+  card.className="task";
+  const text=document.createElement("p");
+  text.textContent=s;
+  const info=document.createElement("p");
+  info.className="meta";
+  info.textContent=(uncertain.test(s)?"Needs review · ":"Suggested task · ")+(setswana.test(s)?"Setswana":"English");
+  const add=document.createElement("button");
+  add.textContent="Save task";
+  add.onclick=()=>{
+   tasks.push({
+    id:Date.now()+Math.random(),
+    text:s,
+    category:"Other",
+    deadline:findDeadline(s),
+    date:"",
+    time:"",
+    completed:false,
+    uncertain:uncertain.test(s),
+    reminderSent:false
+   });
+   save();
+   add.textContent="Saved";
+   add.disabled=true;
+  };
+  card.append(text,info,add);
+  area.appendChild(card);
+ });
+}
+
+function findDeadline(s){
+ const patterns=[
+  [/\btoday\b|\bgompieno\b/i,"Today"],
+  [/\btomorrow\b|\bka moso\b/i,"Tomorrow"],
+  [/\bmonday\b|\bmantaga\b/i,"Monday"],
+  [/\btuesday\b|\blabobedi\b/i,"Tuesday"],
+  [/\bwednesday\b|\blaboraro\b/i,"Wednesday"],
+  [/\bthursday\b|\blabone\b/i,"Thursday"],
+  [/\bfriday\b|\blabotlhano\b/i,"Friday"],
+  [/\bsaturday\b|\bmatlhatso\b/i,"Saturday"],
+  [/\bsunday\b|\bsontaga\b/i,"Sunday"]
+ ];
+ for(const [pattern,value] of patterns)if(pattern.test(s))return value;
+ return "";
+}
+
+function editTask(id){
+ const t=tasks.find(x=>x.id===id);
+ if(!t)return;
+ const text=prompt("Task description:",t.text);
+ if(text===null)return;
+ if(text.trim())t.text=text.trim();
+ const date=prompt("Reminder date (YYYY-MM-DD), or blank:",t.date||"");
+ if(date===null)return;
+ if(date.trim()&&!/^\d{4}-\d{2}-\d{2}$/.test(date.trim())){
+  alert("Use YYYY-MM-DD for the date.");
+  return;
+ }
+ t.date=date.trim();
+ const time=prompt("Reminder time (HH:MM), or blank for 9:00 AM:",t.time||"");
+ if(time===null)return;
+ if(time.trim()&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(time.trim())){
+  alert("Use 24-hour time, for example 14:30.");
+  return;
+ }
+ t.time=time.trim();
+ t.reminderSent=false;
+ save();
+}
+
+function toggle(id){
+ const t=tasks.find(x=>x.id===id);
+ if(t){t.completed=!t.completed;save();}
+}
+function removeTask(id){
+ tasks=tasks.filter(t=>t.id!==id);save();
+}
+function clearCompleted(){
+ tasks=tasks.filter(t=>!t.completed);save();
+}
+
+function render(){
+ const list=document.getElementById("taskList");
+ list.innerHTML="";
+ const query=document.getElementById("search").value.toLowerCase();
+ const filter=document.getElementById("filter").value;
+ let visible=tasks.filter(t=>{
+  if(!t.text.toLowerCase().includes(query))return false;
+  if(filter==="Pending")return !t.completed;
+  if(filter==="Completed")return t.completed;
+  if(filter==="Due")return isDueToday(t);
+  if(filter==="Overdue")return isOverdue(t);
+  return true;
+ });
+ if(!visible.length)list.textContent="No matching tasks.";
+ visible.forEach(t=>{
+  const card=document.createElement("div");
+  card.className="task"+(t.completed?" done":"");
+  const title=document.createElement("div");
+  title.className="task-title";
+  title.textContent=t.text;
+  const meta=document.createElement("p");
+  meta.className="meta";
+  meta.textContent="Reminder: "+(dueDate(t)||"No date")+
+   " · "+(t.time||"09:00");
+  const status=document.createElement("p");
+  status.className="meta";
+  if(t.completed)status.textContent="Completed";
+  else if(isOverdue(t)){
+   status.textContent="Overdue";
+   status.classList.add("alert");
+  }else if(isDueToday(t)){
+   status.textContent="Due today";
+   status.classList.add("alert");
+  }else if(dueDate(t))status.textContent="Scheduled";
+  else status.textContent="No reminder date set";
+  const actions=document.createElement("div");
+  actions.className="actions";
+  const done=document.createElement("button");
+  done.className="small";
+  done.textContent=t.completed?"Mark pending":"Complete";
+  done.onclick=()=>toggle(t.id);
+  const edit=document.createElement("button");
+  edit.className="small secondary";
+  edit.textContent="Edit reminder";
+  edit.onclick=()=>editTask(t.id);
+  const del=document.createElement("button");
+  del.className="small danger";
+  del.textContent="Delete";
+  del.onclick=()=>removeTask(t.id);
+  actions.append(done,edit,del);
+  card.append(title,meta,status,actions);
+  list.appendChild(card);
+ });
+ const total=tasks.length;
+ const completed=tasks.filter(t=>t.completed).length;
+ document.getElementById("total").textContent=total;
+ document.getElementById("completed").textContent=completed;
+ document.getElementById("pending").textContent=total-completed;
+ document.getElementById("dueToday").textContent=tasks.filter(isDueToday).length;
+ document.getElementById("overdue").textContent=tasks.filter(isOverdue).length;
+ const percent=total?Math.round(completed/total*100):0;
+ document.getElementById("progressBar").style.width=percent+"%";
+ document.getElementById("progressText").textContent=percent+"% completed";
+ updatePermission();
+}
+
+render();
+checkReminders();
+setInterval(checkReminders,30000);
+</script>
+</body>
+                                 </html>
+                                 
