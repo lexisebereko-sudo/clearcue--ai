@@ -1,0 +1,407 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ClearCue AI | Version 0.8.1</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0b1220;color:#f2f5fa;font-family:Arial,sans-serif}
+main{max-width:600px;margin:auto;padding:18px 15px 100px}
+header{display:flex;justify-content:space-between;align-items:center}
+.logo{background:#8ce0c0;color:#10221e;padding:12px;border-radius:12px;font-weight:bold}
+.tag{color:#8ce0c0;font-size:12px}
+h1{font-size:28px;margin-top:28px}
+p{color:#aab8ca}
+.card{background:#17263b;padding:16px;border-radius:15px;margin:14px 0}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{background:#24374e;padding:14px;border-radius:12px}
+.stat strong{display:block;color:#8ce0c0;font-size:26px}
+button,input,textarea,select{font:inherit}
+button{border:0;border-radius:9px;padding:11px;background:#8ce0c0;color:#10221e;font-weight:bold;cursor:pointer}
+textarea,input[type=text],input[type=date],input[type=time],select{width:100%;padding:12px;background:#0d1726;color:white;border:1px solid #40516a;border-radius:9px;margin:5px 0}
+textarea{min-height:100px}
+.primary{width:100%;margin-top:8px}
+.secondary{background:#30445e;color:white}
+.view{display:none}
+.view.active{display:block}
+.nav{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:space-around;background:#142238;border-top:1px solid #40516a;padding:9px 3px}
+.nav button{background:transparent;color:#b9c7d8;font-size:11px;padding:9px 5px;flex:1}
+.nav button.active{background:#29463f;color:#8ce0c0}
+.task{border-bottom:1px solid #40516a;padding:13px 0;overflow-wrap:anywhere}
+.task:last-child{border:0}
+.task input[type=checkbox]{width:20px;height:20px}
+.task-title{font-weight:bold}
+.done{text-decoration:line-through;opacity:.5}
+.small{font-size:12px;color:#aab8ca}
+.status{display:inline-block;padding:4px 8px;border-radius:8px;background:#29463f;color:#a6e9d3;font-size:11px;margin:5px 0}
+.overdue{background:#512c37;color:#ffc4ce}
+.today{background:#594725;color:#ffe0a1}
+.delete{background:#57313b;color:white;padding:7px 10px;font-size:12px}
+.bar{height:10px;background:#30445e;border-radius:20px;overflow:hidden}
+.bar div{height:100%;background:#8ce0c0;width:0}
+label{display:block;font-size:12px;color:#b9c7d8;margin-top:9px}
+.notice{font-size:12px;background:#24374e;padding:12px;border-radius:10px}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div class="logo">C · ClearCue AI</div>
+<div class="tag">VERSION 0.8.1</div>
+</header>
+
+<section id="home" class="view active">
+<h1>Welcome to ClearCue.</h1>
+<p>Less confusion. More things done.</p>
+<div class="stats">
+<div class="stat"><strong id="total">0</strong>Total tasks</div>
+<div class="stat"><strong id="completed">0</strong>Completed</div>
+<div class="stat"><strong id="pending">0</strong>Pending</div>
+<div class="stat"><strong id="overdue">0</strong>Overdue</div>
+</div>
+<div class="card">
+<h2>Your progress</h2>
+<div class="bar"><div id="bar"></div></div>
+<p id="percent">0% completed</p>
+</div>
+<div class="card">
+<h2>Quick Capture</h2>
+<textarea id="message" placeholder="Write what you need to do..."></textarea>
+<button class="primary" id="capture">Add tasks</button>
+</div>
+<div class="card">
+<h2>Needs attention</h2>
+<div id="attention">Nothing needs attention.</div>
+</div>
+</section>
+
+<section id="tasks" class="view">
+<h1>My Tasks</h1>
+<p>Manage your tasks and deadlines.</p>
+<div class="card">
+<div id="taskList"></div>
+<div id="emptyTasks">No tasks saved yet.</div>
+</div>
+</section>
+
+<section id="deadlines" class="view">
+<h1>Deadlines</h1>
+<p>View tasks with reminder dates.</p>
+<div class="card">
+<div id="deadlineList"></div>
+<div id="emptyDeadlines">No deadlines saved yet.</div>
+</div>
+<div class="notice">Reminder dates are saved in this browser. This prototype does not send automatic background notifications.</div>
+</section>
+
+<section id="progress" class="view">
+<h1>My Progress</h1>
+<div class="card">
+<h2>Completion rate</h2>
+<strong id="rate" style="font-size:36px;color:#8ce0c0">0%</strong>
+<div class="bar"><div id="bar2"></div></div>
+<p id="progressDetail">No tasks recorded yet.</p>
+</div>
+</section>
+
+<section id="settings" class="view">
+<h1>Settings</h1>
+<div class="card">
+<h2>Preferred language</h2>
+<select id="language">
+<option>English</option>
+<option>Setswana</option>
+</select>
+<p class="small">Your preference will be saved automatically. Full translation is not yet available.</p>
+</div>
+<div class="card">
+<h2>Browser notifications</h2>
+<p id="notificationStatus">Checking notification support...</p>
+<button id="enableNotifications" class="secondary">Enable notifications</button>
+</div>
+<div class="card">
+<h2>Data management</h2>
+<button id="clearCompleted" class="secondary">Clear completed tasks</button>
+<br><br>
+<button id="deleteAll" class="secondary">Delete all tasks</button>
+</div>
+<div class="notice">Your tasks are stored locally on this device. They are not synced to an online account.</div>
+</section>
+
+</main>
+
+<nav class="nav">
+<button class="active" data-page="home">⌂<br>Home</button>
+<button data-page="tasks">☷<br>Tasks</button>
+<button data-page="deadlines">◷<br>Deadlines</button>
+<button data-page="progress">▥<br>Progress</button>
+<button data-page="settings">⚙<br>Settings</button>
+</nav>
+
+<script>
+(function(){
+"use strict";
+
+var KEY="clearcue_tasks_v081";
+var tasks=[];
+
+try{
+var saved=localStorage.getItem(KEY);
+if(saved){
+tasks=JSON.parse(saved)||[];
+}else{
+var old=localStorage.getItem("clearcue_tasks_v08")||
+localStorage.getItem("clearcue_tasks_v07")||
+localStorage.getItem("clearcue_tasks_v06");
+if(old){
+tasks=JSON.parse(old)||[];
+tasks=tasks.map(function(t){
+return {
+id:String(t.id||Date.now()+Math.random()),
+title:String(t.title||""),
+done:!!t.done,
+uncertain:!!t.uncertain,
+deadline:String(t.deadline||"No clear deadline"),
+date:String(t.reminderDate||""),
+time:String(t.reminderTime||"09:00")
+};
+});
+}
+}
+}catch(e){tasks=[];}
+
+function save(){
+try{
+localStorage.setItem(KEY,JSON.stringify(tasks));
+}catch(e){
+alert("Could not save tasks. Check your browser storage.");
+}
+render();
+}
+
+function el(id){
+return document.getElementById(id);
+}
+
+function escapeText(s){
+return String(s).replace(/[&<>"']/g,function(c){
+return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+});
+}
+
+function showPage(page,button){
+document.querySelectorAll(".view").forEach(function(v){
+v.classList.remove("active");
+});
+var target=el(page);
+if(target) target.classList.add("active");
+
+document.querySelectorAll(".nav button").forEach(function(b){
+b.classList.remove("active");
+});
+if(button) button.classList.add("active");
+render();
+}
+
+document.querySelectorAll(".nav button").forEach(function(button){
+button.addEventListener("click",function(){
+showPage(button.getAttribute("data-page"),button);
+});
+});
+
+function detect(sentence){
+var verbs=[
+"pay","call","send","submit","buy","collect","book",
+"meet","visit","finish","complete","prepare","bring",
+"renew","check","reply","contact","attend","read","write",
+"arrange","register","confirm","deliver","apply","return",
+"print","sign","review","discuss","cancel","order",
+"duela","letsa","romela","reka","kopana","kwala","bala"
+];
+var lower=sentence.toLowerCase();
+var found=verbs.some(function(v){
+return new RegExp("(^|\\W)"+v+"(\\W|$)","i").test(lower);
+});
+if(!found) return null;
+
+var negative=/\b(don't|do not|doesn't|never|must not|should not)\b/i.test(lower);
+var uncertain=/\b(might|may|maybe|could|possibly|perhaps|probably)\b/i.test(lower);
+var date=lower.match(/\b(today|tomorrow|tonight|next week|next month|monday|tuesday|wednesday|thursday|friday|saturday|sunday|gompieno|kamoso|labotlhano)\b/i);
+
+return {
+negative:negative,
+uncertain:uncertain,
+deadline:date?date[0]:"No clear deadline"
+};
+}
+
+function addTasks(text){
+var sentences=text.split(/[.!?\n]+/);
+var count=0;
+
+sentences.forEach(function(sentence){
+sentence=sentence.trim();
+if(!sentence) return;
+
+var result=detect(sentence);
+if(!result||result.negative) return;
+
+tasks.unshift({
+id:String(Date.now())+Math.random().toString(16).slice(2),
+title:sentence,
+done:false,
+uncertain:result.uncertain,
+deadline:result.deadline,
+date:"",
+time:"09:00"
+});
+count++;
+});
+save();
+return count;
+}
+
+el("capture").addEventListener("click",function(){
+var text=el("message").value.trim();
+if(!text){
+alert("Please enter a message first.");
+return;
+}
+var count=addTasks(text);
+el("message").value="";
+alert(count+" task(s) added. Please review the suggestions.");
+});
+
+function status(t){
+if(t.done) return "Completed";
+if(t.date){
+var due=new Date(t.date+"T"+(t.time||"09:00")+":00");
+var now=new Date();
+if(due.toDateString()===now.toDateString()) return "Due today";
+if(due<now) return "Overdue";
+return "Reminder set";
+}
+return t.deadline;
+}
+
+function taskHTML(t){
+var s=status(t);
+var cls=s==="Overdue"?"overdue":s==="Due today"?"today":"";
+return '<div class="task">'+
+'<div class="task-title">'+escapeText(t.title)+'</div>'+
+'<label><input type="checkbox" data-done="'+escapeText(t.id)+'" '+(t.done?"checked":"")+'> Completed</label>'+
+'<span class="status '+cls+'">'+escapeText(s)+'</span>'+
+(t.uncertain?'<span class="status">Needs confirmation</span>':"")+
+'<div class="small">Detected date: '+escapeText(t.deadline)+'</div>'+
+'<label>Reminder date</label>'+
+'<input type="date" data-date="'+escapeText(t.id)+'" value="'+escapeText(t.date||"")+'">'+
+'<label>Reminder time</label>'+
+'<input type="time" data-time="'+escapeText(t.id)+'" value="'+escapeText(t.time||"09:00")+'">'+
+'<br><br><button class="delete" data-delete="'+escapeText(t.id)+'">Delete task</button>'+
+'</div>';
+}
+
+function render(){
+var total=tasks.length;
+var done=tasks.filter(function(t){return t.done;}).length;
+var pending=total-done;
+var overdue=tasks.filter(function(t){return !t.done&&status(t)==="Overdue";}).length;
+var rate=total?Math.round(done/total*100):0;
+
+el("total").textContent=total;
+el("completed").textContent=done;
+el("pending").textContent=pending;
+el("overdue").textContent=overdue;
+el("percent").textContent=rate+"% completed";
+el("rate").textContent=rate+"%";
+el("bar").style.width=rate+"%";
+el("bar2").style.width=rate+"%";
+el("progressDetail").textContent=done+" completed out of "+total+" tasks.";
+
+el("taskList").innerHTML=tasks.map(taskHTML).join("");
+el("emptyTasks").style.display=total?"none":"block";
+
+var dated=tasks.filter(function(t){return !t.done&&(t.date||t.deadline!=="No clear deadline");});
+el("deadlineList").innerHTML=dated.map(taskHTML).join("");
+el("emptyDeadlines").style.display=dated.length?"none":"block";
+
+var attention=tasks.filter(function(t){
+return !t.done&&(status(t)==="Overdue"||status(t)==="Due today"||t.uncertain);
+});
+el("attention").innerHTML=attention.length?
+attention.slice(0,5).map(function(t){return '<p>'+escapeText(t.title)+' — '+escapeText(status(t))+'</p>';}).join(""):
+"Nothing needs attention.";
+
+el("language").value=localStorage.getItem("clearcue_language_v081")||"English";
+updateNotificationStatus();
+}
+
+document.addEventListener("change",function(event){
+var target=event.target;
+if(target.hasAttribute("data-done")){
+var t=tasks.find(function(x){return x.id===target.getAttribute("data-done");});
+if(t)t.done=target.checked;
+save();
+}
+if(target.hasAttribute("data-date")){
+var t=tasks.find(function(x){return x.id===target.getAttribute("data-date");});
+if(t)t.date=target.value;
+save();
+}
+if(target.hasAttribute("data-time")){
+var t=tasks.find(function(x){return x.id===target.getAttribute("data-time");});
+if(t)t.time=target.value;
+save();
+}
+});
+
+document.addEventListener("click",function(event){
+var id=event.target.getAttribute("data-delete");
+if(id){
+tasks=tasks.filter(function(t){return t.id!==id;});
+save();
+}
+});
+
+el("language").addEventListener("change",function(){
+localStorage.setItem("clearcue_language_v081",el("language").value);
+});
+
+el("clearCompleted").addEventListener("click",function(){
+tasks=tasks.filter(function(t){return !t.done;});
+save();
+});
+
+el("deleteAll").addEventListener("click",function(){
+if(confirm("Delete all tasks? This cannot be undone.")){
+tasks=[];
+save();
+}
+});
+
+function updateNotificationStatus(){
+if(!("Notification" in window)){
+el("notificationStatus").textContent="Notifications are not supported in this browser.";
+}else{
+el("notificationStatus").textContent="Notification permission: "+Notification.permission;
+}
+}
+
+el("enableNotifications").addEventListener("click",function(){
+if(!("Notification" in window)){
+alert("Your browser does not support notifications.");
+return;
+}
+Notification.requestPermission().then(function(){
+updateNotificationStatus();
+});
+});
+
+render();
+})();
+</script>
+</body>
+  </html>
+  
