@@ -1,0 +1,535 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClearCue AI - Version 0.12</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#101827;color:#f4f6fb}
+header{text-align:center;padding:22px;background:#17243a}
+header h1{margin:0;color:#72d5c0}
+header p{color:#bdc9da}
+nav{display:flex;flex-wrap:wrap;justify-content:center;gap:7px;padding:12px;background:#1b2940}
+button{border:0;border-radius:8px;padding:11px 14px;background:#30435e;color:white;cursor:pointer}
+button.active,button.primary{background:#168f80}
+button.danger{background:#9d3d49}
+main{max-width:900px;margin:auto;padding:16px}
+.view{display:none}
+.view.active{display:block}
+.panel,.task{background:#1b2940;padding:16px;border-radius:12px;margin:12px 0}
+.task{border-left:4px solid #72d5c0}
+.task.done{opacity:.6}
+.high{color:#ff8585}
+.medium{color:#ffd27a}
+.low,.good{color:#72d5c0}
+.warning{color:#ffbd72}
+.small{font-size:13px;color:#bdc9da}
+.stat{display:inline-block;background:#263954;padding:14px;border-radius:10px;margin:5px;min-width:100px}
+input,select,textarea{width:100%;padding:12px;margin:8px 0;border-radius:8px;border:1px solid #52647d;background:#101827;color:white}
+textarea{min-height:110px}
+label{display:block;margin-top:10px}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.progress{height:13px;background:#30435e;border-radius:20px;overflow:hidden}
+.progress div{height:100%;background:#72d5c0;width:0}
+h2{color:#72d5c0}
+</style>
+</head>
+<body>
+
+<header>
+<h1>ClearCue AI</h1>
+<p>Less confusion. More things done.</p>
+<p class="small">Version 0.12 — Advanced Task Organisation</p>
+</header>
+
+<nav>
+<button class="active" data-page="home">Home</button>
+<button data-page="capture">Quick Capture</button>
+<button data-page="tasks">My Tasks</button>
+<button data-page="categories">Categories</button>
+<button data-page="progress">Progress</button>
+<button data-page="settings">Settings</button>
+</nav>
+
+<main>
+
+<section id="home" class="view active">
+<h2>Your Dashboard</h2>
+<div id="stats"></div>
+<div class="panel">
+<h3>Task completion</h3>
+<div class="progress"><div id="homeProgress"></div></div>
+<p id="progressText" class="small"></p>
+</div>
+<div class="panel">
+<h3>Upcoming tasks</h3>
+<div id="upcoming"></div>
+</div>
+<div class="panel">
+<h3>Welcome back</h3>
+<p>Organise your responsibilities with ClearCue.</p>
+<button class="primary" onclick="openPage('capture')">Capture a message</button>
+</div>
+</section>
+
+<section id="capture" class="view">
+<h2>Quick Capture</h2>
+<div class="panel">
+<textarea id="message" placeholder="Example: Urgent! Submit my application today. Pay the electricity bill tomorrow."></textarea>
+<button class="primary" onclick="analyse()">Analyse message</button>
+<div id="results"></div>
+</div>
+</section>
+
+<section id="tasks" class="view">
+<h2>My Tasks</h2>
+<input id="search" placeholder="Search tasks..." oninput="renderTasks()">
+<select id="filterCategory" onchange="renderTasks()">
+<option value="All">All categories</option>
+<option>Education</option>
+<option>Work</option>
+<option>Personal</option>
+<option>Finance</option>
+<option>Health</option>
+<option>Other</option>
+</select>
+<select id="filterStatus" onchange="renderTasks()">
+<option value="All">All tasks</option>
+<option value="Pending">Pending</option>
+<option value="Completed">Completed</option>
+<option value="Overdue">Overdue</option>
+</select>
+<select id="sortTasks" onchange="renderTasks()">
+<option value="priority">Sort: Priority</option>
+<option value="deadline">Sort: Deadline</option>
+<option value="newest">Sort: Newest first</option>
+<option value="alphabetical">Sort: Alphabetical</option>
+</select>
+<div id="taskList"></div>
+</section>
+
+<section id="categories" class="view">
+<h2>Task Categories</h2>
+<div id="categoryList"></div>
+</section>
+
+<section id="progress" class="view">
+<h2>Your Progress</h2>
+<div class="panel">
+<div class="progress"><div id="progressBar"></div></div>
+<p id="progressDetails"></p>
+</div>
+<div class="panel" id="categoryProgress"></div>
+</section>
+
+<section id="settings" class="view">
+<h2>Settings</h2>
+<div class="panel">
+<label>Preferred language</label>
+<select id="language">
+<option>English</option>
+<option>Setswana</option>
+</select>
+<button class="primary" onclick="saveSettings()">Save settings</button>
+<p id="settingsMessage" class="good"></p>
+</div>
+<div class="panel">
+<h3>About Version 0.12</h3>
+<p>Manage, edit, categorise and schedule your tasks.</p>
+<p class="small">Tasks are stored locally in this browser. This prototype does not yet provide cloud synchronisation or guaranteed background notifications.</p>
+</div>
+</section>
+
+</main>
+
+<script>
+const KEY="clearcue_tasks_v012";
+const CATEGORIES=["Education","Work","Personal","Finance","Health","Other"];
+let tasks=[];
+
+function save(){
+ localStorage.setItem(KEY,JSON.stringify(tasks));
+}
+
+function load(){
+ try{
+  const saved=localStorage.getItem(KEY);
+  if(saved!==null){
+   tasks=JSON.parse(saved)||[];
+   return;
+  }
+  for(const key of ["clearcue_tasks_v011","clearcue_tasks_v010","clearcue_tasks_v09","clearcue_tasks_v081","clearcue_tasks_v08","clearcue_tasks_v07"]){
+   const old=localStorage.getItem(key);
+   if(old){
+    const data=JSON.parse(old);
+    if(Array.isArray(data)){
+     tasks=data.map((t,i)=>({
+      ...t,
+      id:t.id??Date.now()+i,
+      priority:t.priority||"Low",
+      category:t.category||"Other",
+      deadline:t.deadline||"",
+      time:t.time||"",
+      completed:!!t.completed
+     }));
+     break;
+    }
+   }
+  }
+ }catch(e){tasks=[]}
+ save();
+}
+
+function openPage(page){
+ document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+ document.querySelectorAll("nav button").forEach(b=>b.classList.remove("active"));
+ document.getElementById(page).classList.add("active");
+ const button=document.querySelector('nav button[data-page="'+page+'"]');
+ if(button)button.classList.add("active");
+ render();
+}
+
+document.querySelectorAll("nav button").forEach(b=>{
+ b.addEventListener("click",()=>openPage(b.dataset.page));
+});
+
+function categoryOf(text){
+ if(/\b(school|university|college|study|exam|homework|assignment|application|lesson|teacher|biology|mathematics|class|revision)\b/i.test(text))return "Education";
+ if(/\b(work|office|meeting|client|boss|project|business|employee|job|colleague)\b/i.test(text))return "Work";
+ if(/\b(pay|bill|money|bank|rent|electricity|budget|invoice|debt|purchase|salary)\b/i.test(text))return "Finance";
+ if(/\b(doctor|hospital|medicine|health|appointment|exercise|dentist|clinic)\b/i.test(text))return "Health";
+ if(/\b(family|friend|home|birthday|house|personal|clean|shopping)\b/i.test(text))return "Personal";
+ return "Other";
+}
+
+function priorityOf(text){
+ if(/\b(urgent|immediately|asap|right away|emergency|critical|overdue|today|tonight)\b/i.test(text))return "High";
+ if(/\b(important|priority|soon|tomorrow|deadline|by friday|by monday)\b/i.test(text))return "Medium";
+ return "Low";
+}
+
+function getDeadline(text){
+ const s=text.toLowerCase();
+ const now=new Date();
+ const date=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+
+ if(/\btoday\b|\btonight\b/.test(s))return dateText(date);
+ if(/\btomorrow\b/.test(s)){
+  date.setDate(date.getDate()+1);
+  return dateText(date);
+ }
+
+ const days=["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+ for(let i=0;i<7;i++){
+  if(new RegExp("\\b"+days[i]+"\\b").test(s)){
+   let diff=(i-date.getDay()+7)%7;
+   if(/\bnext\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/.test(s)){
+    diff=diff===0?7:diff+7;
+   }else if(diff===0)diff=7;
+   date.setDate(date.getDate()+diff);
+   return dateText(date);
+  }
+ }
+ return "";
+}
+
+function dateText(date){
+ return date.getFullYear()+"-"+String(date.getMonth()+1).padStart(2,"0")+"-"+String(date.getDate()).padStart(2,"0");
+}
+
+function splitSentences(text){
+ return text.match(/[^.!?\n]+[.!?]?/g)||[];
+}
+
+const actionPattern=/\b(submit|send|complete|finish|prepare|write|read|study|revise|attend|visit|buy|pay|collect|deliver|book|schedule|check|review|update|renew|apply|register|email|message|contact|call|phone|meet|discuss|arrange|organise|organize|create|bring|return|clean|repair|fix|cancel|confirm|upload|download|print|sign|file|save|remember to|don't forget to|make sure to|need to|have to|must|should|promised to|plan to)\b/i;
+const uncertainPattern=/\b(might|maybe|may|perhaps|possibly|could|if possible|not sure|thinking about|considering|probably)\b/i;
+const negativePattern=/\b(don't|do not|doesn't|does not|never|not yet|no need to|stop|avoid)\b/i;
+
+function analyse(){
+ const message=document.getElementById("message").value.trim();
+ const results=document.getElementById("results");
+ results.innerHTML="";
+ if(!message){results.textContent="Please enter a message first.";return}
+
+ let found=[];
+ splitSentences(message).forEach(s=>{
+  const clean=s.trim();
+  if(!clean||negativePattern.test(clean)||!actionPattern.test(clean))return;
+  found.push({
+   text:clean,
+   priority:priorityOf(clean),
+   category:categoryOf(clean),
+   deadline:getDeadline(clean),
+   uncertain:uncertainPattern.test(clean)
+  });
+ });
+
+ if(!found.length){results.textContent="No clear actions detected.";return}
+
+ found.forEach((item,index)=>{
+  const card=document.createElement("div");
+  card.className="task";
+  const p=document.createElement("p");
+  p.textContent=item.text;
+  card.appendChild(p);
+
+  const info=document.createElement("p");
+  info.textContent="Priority: "+item.priority+" | Category: "+item.category;
+  card.appendChild(info);
+
+  const due=document.createElement("p");
+  due.textContent="Detected deadline: "+(item.deadline||"None");
+  card.appendChild(due);
+
+  if(item.uncertain){
+   const warning=document.createElement("p");
+   warning.className="warning";
+   warning.textContent="Uncertain wording — review before saving.";
+   card.appendChild(warning);
+  }
+
+  const button=document.createElement("button");
+  button.className="primary";
+  button.textContent="Confirm and save";
+  button.onclick=()=>{
+   tasks.push({
+    id:Date.now()+index,
+    text:item.text,
+    priority:item.priority,
+    category:item.category,
+    deadline:item.deadline,
+    time:"",
+    uncertain:item.uncertain,
+    completed:false,
+    created:Date.now()
+   });
+   save();
+   button.textContent="Saved";
+   button.disabled=true;
+   render();
+  };
+  card.appendChild(button);
+  results.appendChild(card);
+ });
+}
+
+function isOverdue(task){
+ if(!task.deadline||task.completed)return false;
+ const due=new Date(task.deadline+"T"+(task.time||"23:59")+":00");
+ return !isNaN(due.getTime())&&due<new Date();
+}
+
+function editTask(task){
+ const newText=prompt("Edit task description:",task.text||"");
+ if(newText===null)return;
+ if(!newText.trim()){alert("Task description cannot be empty.");return}
+
+ const category=prompt("Category: Education, Work, Personal, Finance, Health or Other",task.category||"Other");
+ if(category===null)return;
+ const valid=CATEGORIES.find(c=>c.toLowerCase()===category.trim().toLowerCase());
+ if(!valid){alert("Please enter one of the listed categories.");return}
+
+ const newDate=prompt("Deadline (YYYY-MM-DD), or leave blank:",task.deadline||"");
+ if(newDate===null)return;
+ if(newDate.trim()&&!/^\d{4}-\d{2}-\d{2}$/.test(newDate.trim())){
+  alert("Please use YYYY-MM-DD for the date.");
+  return;
+ }
+ if(newDate.trim()){
+  const parsed=new Date(newDate.trim()+"T00:00:00");
+  if(isNaN(parsed.getTime())||dateText(parsed)!==newDate.trim()){
+   alert("That date is not valid.");
+   return;
+  }
+ }
+
+ const newTime=prompt("Time (HH:MM), or leave blank:",task.time||"");
+ if(newTime===null)return;
+ if(newTime.trim()&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(newTime.trim())){
+  alert("Please use 24-hour time, for example 14:30.");
+  return;
+ }
+
+ task.text=newText.trim();
+ task.category=valid;
+ task.deadline=newDate.trim();
+ task.time=newTime.trim();
+ save();
+ render();
+}
+
+function makeTaskCard(task){
+ const card=document.createElement("div");
+ card.className="task"+(task.completed?" done":"");
+
+ const p=document.createElement("p");
+ p.textContent=task.text||"Untitled task";
+ card.appendChild(p);
+
+ const info=document.createElement("p");
+ info.className=(task.priority||"Low").toLowerCase();
+ info.textContent="Priority: "+(task.priority||"Low")+" | Category: "+(task.category||"Other");
+ card.appendChild(info);
+
+ const due=document.createElement("p");
+ due.textContent="Deadline: "+(task.deadline||"Not set")+(task.time?" at "+task.time:"");
+ card.appendChild(due);
+
+ if(isOverdue(task)){
+  const warning=document.createElement("p");
+  warning.className="warning";
+  warning.textContent="Overdue — review this task.";
+  card.appendChild(warning);
+ }
+
+ const checkLabel=document.createElement("label");
+ const check=document.createElement("input");
+ check.type="checkbox";
+ check.style.width="auto";
+ check.checked=!!task.completed;
+ check.addEventListener("change",()=>{
+  task.completed=check.checked;save();render();
+ });
+ checkLabel.appendChild(check);
+ checkLabel.append(" Completed");
+ card.appendChild(checkLabel);
+
+ const actions=document.createElement("div");
+ actions.className="actions";
+
+ const edit=document.createElement("button");
+ edit.textContent="Edit task";
+ edit.onclick=()=>editTask(task);
+ actions.appendChild(edit);
+
+ const del=document.createElement("button");
+ del.className="danger";
+ del.textContent="Delete";
+ del.onclick=()=>{
+  if(confirm("Delete this task?")){
+   tasks=tasks.filter(t=>t.id!==task.id);
+   save();render();
+  }
+ };
+ actions.appendChild(del);
+ card.appendChild(actions);
+ return card;
+}
+
+function renderTasks(){
+ const list=document.getElementById("taskList");
+ if(!list)return;
+ list.innerHTML="";
+
+ const query=(document.getElementById("search").value||"").toLowerCase();
+ const category=document.getElementById("filterCategory").value;
+ const status=document.getElementById("filterStatus").value;
+ const sort=document.getElementById("sortTasks").value;
+
+ let filtered=tasks.filter(t=>{
+  const textMatch=(t.text||"").toLowerCase().includes(query);
+  const categoryMatch=category==="All"||(t.category||"Other")===category;
+  let statusMatch=true;
+  if(status==="Pending")statusMatch=!t.completed;
+  if(status==="Completed")statusMatch=!!t.completed;
+  if(status==="Overdue")statusMatch=isOverdue(t);
+  return textMatch&&categoryMatch&&statusMatch;
+ });
+
+ const rank={High:3,Medium:2,Low:1};
+ filtered.sort((a,b)=>{
+  if(sort==="priority")return (rank[b.priority||"Low"]||1)-(rank[a.priority||"Low"]||1);
+  if(sort==="deadline"){
+   return (a.deadline||"9999-99-99").localeCompare(b.deadline||"9999-99-99");
+  }
+  if(sort==="newest")return (b.created||b.id||0)-(a.created||a.id||0);
+  if(sort==="alphabetical")return (a.text||"").localeCompare(b.text||"");
+  return 0;
+ });
+
+ if(!filtered.length){list.textContent="No matching tasks found.";return}
+ filtered.forEach(t=>list.appendChild(makeTaskCard(t)));
+}
+
+function render(){
+ const completed=tasks.filter(t=>t.completed).length;
+ const total=tasks.length;
+ const pending=total-completed;
+ const rate=total?Math.round(completed/total*100):0;
+ const overdue=tasks.filter(isOverdue).length;
+
+ document.getElementById("stats").innerHTML=
+ '<div class="stat"><strong>'+total+'</strong><br><span class="small">Total</span></div>'+
+ '<div class="stat"><strong>'+pending+'</strong><br><span class="small">Pending</span></div>'+
+ '<div class="stat"><strong>'+completed+'</strong><br><span class="small">Completed</span></div>'+
+ '<div class="stat"><strong>'+overdue+'</strong><br><span class="small">Overdue</span></div>';
+
+ document.getElementById("homeProgress").style.width=rate+"%";
+ document.getElementById("progressBar").style.width=rate+"%";
+ document.getElementById("progressText").textContent=rate+"% of your tasks completed.";
+ document.getElementById("progressDetails").textContent=completed+" completed out of "+total+" tasks.";
+
+ const upcoming=document.getElementById("upcoming");
+ upcoming.innerHTML="";
+ const next=tasks.filter(t=>!t.completed&&t.deadline).sort((a,b)=>a.deadline.localeCompare(b.deadline)).slice(0,5);
+ if(!next.length)upcoming.textContent="No scheduled tasks yet.";
+ next.forEach(t=>{
+  const p=document.createElement("p");
+  p.textContent=t.deadline+" — "+t.text;
+  upcoming.appendChild(p);
+ });
+
+ const categoryList=document.getElementById("categoryList");
+ categoryList.innerHTML="";
+ CATEGORIES.forEach(category=>{
+  const group=tasks.filter(t=>t.category===category);
+  const panel=document.createElement("div");
+  panel.className="panel";
+  const heading=document.createElement("h3");
+  heading.textContent=category+" ("+group.length+")";
+  panel.appendChild(heading);
+  if(!group.length){
+   const p=document.createElement("p");
+   p.className="small";
+   p.textContent="No tasks in this category.";
+   panel.appendChild(p);
+  }else{
+   group.forEach(t=>{
+    const p=document.createElement("p");
+    p.textContent=(t.completed?"✓ ":"• ")+t.text;
+    panel.appendChild(p);
+   });
+  }
+  categoryList.appendChild(panel);
+ });
+
+ const categoryProgress=document.getElementById("categoryProgress");
+ categoryProgress.innerHTML="";
+ CATEGORIES.forEach(category=>{
+  const group=tasks.filter(t=>t.category===category);
+  const p=document.createElement("p");
+  p.textContent=category+": "+group.filter(t=>t.completed).length+" of "+group.length+" completed";
+  categoryProgress.appendChild(p);
+ });
+
+ renderTasks();
+}
+
+function saveSettings(){
+ localStorage.setItem("clearcue_language",document.getElementById("language").value);
+ document.getElementById("settingsMessage").textContent="Settings saved.";
+}
+
+function loadSettings(){
+ document.getElementById("language").value=localStorage.getItem("clearcue_language")||"English";
+}
+
+load();
+loadSettings();
+render();
+</script>
+</body>
+  </html>
+  
