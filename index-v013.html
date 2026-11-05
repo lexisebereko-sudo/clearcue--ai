@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClearCue AI V0.13</title>
+<style>
+:root{--bg:#101827;--panel:#1b2940;--text:#f4f7fb;--muted:#aab8cc;--accent:#65d6bd;--line:#34445d}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Arial,sans-serif;padding:18px}
+header{text-align:center;padding:15px 0}
+h1{margin:0;color:var(--accent);font-size:28px}
+header p{color:var(--muted);margin:8px 0}
+main{max-width:850px;margin:auto}
+.panel{background:var(--panel);padding:17px;border-radius:14px;margin:15px 0}
+h2{font-size:19px;margin-top:0}
+textarea,input,select{width:100%;padding:12px;border:1px solid var(--line);border-radius:9px;background:#101827;color:white;margin:6px 0 12px;font-size:15px}
+textarea{min-height:110px;resize:vertical}
+button{border:0;border-radius:9px;padding:11px 15px;background:var(--accent);color:#10221f;font-weight:bold;cursor:pointer;margin:4px}
+button.secondary{background:#34445d;color:white}
+button.danger{background:#9e4655;color:white}
+button.small{padding:7px 10px;font-size:12px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.stat{background:#101827;padding:13px;border-radius:10px;text-align:center}
+.stat strong{display:block;font-size:23px;color:var(--accent)}
+.stat span{font-size:12px;color:var(--muted)}
+.task{background:#101827;border:1px solid var(--line);padding:13px;border-radius:10px;margin:10px 0}
+.task.done{opacity:.6}
+.task.done .task-title{text-decoration:line-through}
+.task-title{font-weight:bold;overflow-wrap:anywhere}
+.meta{font-size:12px;color:var(--muted);margin:7px 0}
+.tag{display:inline-block;background:#34445d;padding:4px 8px;border-radius:20px;font-size:11px;margin:3px}
+.uncertain{color:#ffd27a}
+.actions{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.progress{height:10px;background:#34445d;border-radius:10px;overflow:hidden}
+.progress div{height:100%;background:var(--accent);width:0}
+.hidden{display:none}
+footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
+@media(max-width:480px){body{padding:10px}.stats{grid-template-columns:repeat(3,1fr)}.stat{padding:9px}.stat strong{font-size:19px}}
+</style>
+</head>
+<body>
+<header>
+<h1>ClearCue AI</h1>
+<p>Less confusion. More things done.</p>
+<span class="tag">Version 0.13 — English + Setswana</span>
+</header>
+
+<main>
+<section class="panel">
+<h2>Dashboard</h2>
+<div class="stats">
+<div class="stat"><strong id="total">0</strong><span>Total tasks</span></div>
+<div class="stat"><strong id="pending">0</strong><span>Pending</span></div>
+<div class="stat"><strong id="completed">0</strong><span>Completed</span></div>
+</div>
+<p class="meta">Overall progress</p>
+<div class="progress"><div id="progressBar"></div></div>
+<p id="progressText" class="meta">0% completed</p>
+</section>
+
+<section class="panel">
+<h2>Quick Capture</h2>
+<p class="meta">Paste a message or note in English or Setswana. ClearCue will look for possible tasks.</p>
+<textarea id="capture" placeholder="Example: Please submit my application by Friday.&#10;Ke tshwanetse go duela sekoloto gompieno."></textarea>
+<button onclick="analyseText()">Find my tasks</button>
+<div id="analysisResults"></div>
+</section>
+
+<section class="panel">
+<h2>My Tasks</h2>
+<input id="search" placeholder="Search tasks..." oninput="renderTasks()">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+<select id="categoryFilter" onchange="renderTasks()">
+<option value="All">All categories</option>
+<option>Education</option><option>Work</option><option>Personal</option>
+<option>Finance</option><option>Health</option><option>Other</option>
+</select>
+<select id="statusFilter" onchange="renderTasks()">
+<option value="All">All statuses</option>
+<option value="Pending">Pending</option><option value="Completed">Completed</option>
+<option value="Uncertain">Uncertain</option>
+</select>
+</div>
+<select id="sortBy" onchange="renderTasks()">
+<option value="newest">Sort: Newest</option>
+<option value="priority">Sort: Priority</option>
+<option value="deadline">Sort: Deadline</option>
+<option value="alphabetical">Sort: Alphabetical</option>
+</select>
+<div id="taskList"></div>
+<button class="secondary" onclick="clearCompleted()">Clear completed</button>
+</section>
+
+<section class="panel">
+<h2>Progress by Category</h2>
+<div id="categoryProgress"></div>
+</section>
+
+<section class="panel">
+<h2>Language Support</h2>
+<p class="meta">ClearCue currently uses basic phrase matching for English and Setswana. It is still learning and may misunderstand some sentences.</p>
+<p><span class="tag">English</span><span class="tag">Setswana</span></p>
+<p class="meta">Always review suggested tasks before saving them.</p>
+</section>
+</main>
+<footer>ClearCue AI V0.13 · Rule-based prototype · Your tasks stay in this browser.</footer>
+
+<script>
+const STORAGE_KEY="clearcue_tasks_v013";
+let tasks=[];
+
+try{
+ const saved=localStorage.getItem(STORAGE_KEY);
+ if(saved){tasks=JSON.parse(saved)||[];}
+ else{
+  const previous=localStorage.getItem("clearcue_tasks_v012");
+  if(previous){
+   tasks=(JSON.parse(previous)||[]).map(t=>({
+    id:t.id||Date.now()+Math.random(),
+    text:t.text||t.title||"Untitled task",
+    category:t.category||"Other",
+    deadline:t.deadline||"",
+    time:t.time||"",
+    completed:!!t.completed,
+    uncertain:!!t.uncertain,
+    source:t.source||t.text||"",
+    language:t.language||"English",
+    created:t.created||Date.now()
+   }));
+  }
+ }
+}catch(e){tasks=[];}
+
+function save(){
+ localStorage.setItem(STORAGE_KEY,JSON.stringify(tasks));
+ renderTasks();
+}
+
+function detectLanguage(sentence){
+ const setswanaWords=/\b(ke tshwanetse|re tshwanetse|o tshwanetse|ba tshwanetse|gompieno|ka moso|gakologelwa go|tlhoka go|duela|romela|tsenya kopo|Labotlhano|Laboraro|Labone|Labobedi|Mantaga|Matlhatso|Sontaga)\b/i;
+ return setswanaWords.test(sentence)?"Setswana":"English";
+}
+
+function isNegative(s){
+ return /\b(don't|do not|doesn't|never|not yet|shouldn't|cannot|can't)\b/i.test(s)
+ || /\b(se ka|ga ke|ga o|ga re|ga ba|o se ka)\b/i.test(s);
+}
+
+function isUncertain(s){
+ return /\b(might|maybe|may|possibly|could|perhaps|not sure)\b/i.test(s)
+ || /\b(gongwe|mohlomongwe|nka nna)\b/i.test(s);
+}
+
+const englishActions=/\b(submit|send|pay|call|contact|attend|complete|finish|collect|prepare|buy|book|visit|read|study|revise|write|apply|register|renew|deliver|remember to|make sure to|don't forget to)\b/i;
+const setswanaActions=/\b(ke tshwanetse go|re tshwanetse go|o tshwanetse go|ba tshwanetse go|gakologelwa go|tlhoka go|duela|romela|tsenya kopo|ithuta|kwala|fetsa|ya kwa)\b/i;
+
+function hasAction(s){
+ return englishActions.test(s)||setswanaActions.test(s);
+}
+
+function getDeadline(s){
+ if(/\b(today|gompieno)\b/i.test(s))return "Today";
+ if(/\b(tomorrow|ka moso)\b/i.test(s))return "Tomorrow";
+ const days=[
+  [/\b(monday|mantaga)\b/i,"Monday"],
+  [/\b(tuesday|labobedi)\b/i,"Tuesday"],
+  [/\b(wednesday|laboraro)\b/i,"Wednesday"],
+  [/\b(thursday|labone)\b/i,"Thursday"],
+  [/\b(friday|labotlhano)\b/i,"Friday"],
+  [/\b(saturday|matlhatso)\b/i,"Saturday"],
+  [/\b(sunday|sontaga)\b/i,"Sunday"]
+ ];
+ for(const [pattern,day] of days){if(pattern.test(s))return day;}
+ if(/\b(next week|bekeng e e tlang)\b/i.test(s))return "Next week";
+ return "";
+}
+
+function getCategory(s){
+ if(/\b(application|school|university|lesson|study|exam|assignment|homework|book|teacher|revise|ithuta)\b/i.test(s))return "Education";
+ if(/\b(work|office|meeting|client|job|business|boss)\b/i.test(s))return "Work";
+ if(/\b(pay|bill|money|electricity|rent|bank|invoice|duela|sekoloto)\b/i.test(s))return "Finance";
+ if(/\b(doctor|medicine|hospital|health|appointment|clinic)\b/i.test(s))return "Health";
+ if(/\b(family|friend|home|personal|visit|collect)\b/i.test(s))return "Personal";
+ return "Other";
+}
+
+function analyseText(){
+ const input=document.getElementById("capture").value.trim();
+ const output=document.getElementById("analysisResults");
+ output.innerHTML="";
+ if(!input){output.textContent="Please enter a message first.";return;}
+
+ const sentences=input.split(/[\n.!?]+/).map(s=>s.trim()).filter(Boolean);
+ const found=[];
+ sentences.forEach(sentence=>{
+  if(hasAction(sentence)&&!isNegative(sentence)){
+   found.push({
+    text:sentence,
+    source:sentence,
+    language:detectLanguage(sentence),
+    deadline:getDeadline(sentence),
+    category:getCategory(sentence),
+    uncertain:isUncertain(sentence)
+   });
+  }
+ });
+
+ if(!found.length){
+  output.innerHTML='<p class="meta">No clear action was detected. Try writing the task more directly.</p>';
+  return;
+ }
+
+ found.forEach((item,index)=>{
+  const div=document.createElement("div");
+  div.className="task";
+  const title=document.createElement("div");
+  title.className="task-title";
+  title.textContent=item.text;
+  const info=document.createElement("p");
+  info.className="meta";
+  info.textContent=item.language+" · "+item.category+(item.deadline?" · "+item.deadline:"")+(item.uncertain?" · Uncertain":"");
+  const add=document.createElement("button");
+  add.textContent="Save task";
+  add.onclick=()=>{
+   tasks.push({...item,id:Date.now()+Math.random(),completed:false,created:Date.now(),time:""});
+   save();
+   add.textContent="Saved";
+   add.disabled=true;
+  };
+  div.append(title,info,add);
+  output.appendChild(div);
+ });
+}
+
+function editTask(id){
+ const task=tasks.find(t=>t.id===id);
+ if(!task)return;
+ const newText=prompt("Edit task description:",task.text);
+ if(newText===null)return;
+ if(newText.trim())task.text=newText.trim();
+ const category=prompt("Category: Education, Work, Personal, Finance, Health or Other",task.category);
+ if(category!==null&&["Education","Work","Personal","Finance","Health","Other"].includes(category.trim()))task.category=category.trim();
+ const deadline=prompt("Deadline (YYYY-MM-DD or leave blank):",task.deadline||"");
+ if(deadline!==null)task.deadline=deadline.trim();
+ const time=prompt("Time (HH:MM or leave blank):",task.time||"");
+ if(time!==null)task.time=time.trim();
+ save();
+}
+
+function toggleTask(id){
+ const task=tasks.find(t=>t.id===id);
+ if(task){task.completed=!task.completed;save();}
+}
+function deleteTask(id){
+ tasks=tasks.filter(t=>t.id!==id);save();
+}
+function clearCompleted(){
+ tasks=tasks.filter(t=>!t.completed);save();
+}
+
+function renderTasks(){
+ const list=document.getElementById("taskList");
+ list.innerHTML="";
+ const search=document.getElementById("search").value.toLowerCase();
+ const category=document.getElementById("categoryFilter").value;
+ const status=document.getElementById("statusFilter").value;
+ let visible=tasks.filter(t=>
+  t.text.toLowerCase().includes(search)&&
+  (category==="All"||t.category===category)&&
+  (status==="All"||(status==="Completed"&&t.completed)||(status==="Pending"&&!t.completed&&!t.uncertain)||(status==="Uncertain"&&t.uncertain&&!t.completed))
+ );
+
+ const priorityOrder={High:0,Medium:1,Low:2};
+ const sort=document.getElementById("sortBy").value;
+ if(sort==="alphabetical")visible.sort((a,b)=>a.text.localeCompare(b.text));
+ if(sort==="newest")visible.sort((a,b)=>b.created-a.created);
+ if(sort==="priority")visible.sort((a,b)=>(priorityOrder[a.priority]??1)-(priorityOrder[b.priority]??1));
+ if(sort==="deadline")visible.sort((a,b)=>(a.deadline||"ZZZ").localeCompare(b.deadline||"ZZZ"));
+
+ if(!visible.length)list.innerHTML='<p class="meta">No tasks to display.</p>';
+
+ visible.forEach(task=>{
+  const card=document.createElement("div");
+  card.className="task"+(task.completed?" done":"");
+  const title=document.createElement("div");
+  title.className="task-title";
+  title.textContent=task.text;
+  const meta=document.createElement("div");
+  meta.className="meta";
+  meta.textContent=task.category+" · "+(task.deadline||"No deadline")+(task.time?" · "+task.time:"")+(task.language?" · "+task.language:"");
+  const tags=document.createElement("div");
+  tags.innerHTML='<span class="tag">'+(task.completed?"Completed":"Pending")+'</span><span class="tag">'+(task.uncertain?"Needs review":"Clear suggestion")+'</span>';
+  const actions=document.createElement("div");
+  actions.className="actions";
+  const done=document.createElement("button");
+  done.className="small";
+  done.textContent=task.completed?"Mark pending":"Complete";
+  done.onclick=()=>toggleTask(task.id);
+  const edit=document.createElement("button");
+  edit.className="small secondary";
+  edit.textContent="Edit";
+  edit.onclick=()=>editTask(task.id);
+  const del=document.createElement("button");
+  del.className="small danger";
+  del.textContent="Delete";
+  del.onclick=()=>deleteTask(task.id);
+  actions.append(done,edit,del);
+  card.append(title,meta,tags,actions);
+  list.appendChild(card);
+ });
+
+ const total=tasks.length;
+ const completed=tasks.filter(t=>t.completed).length;
+ document.getElementById("total").textContent=total;
+ document.getElementById("completed").textContent=completed;
+ document.getElementById("pending").textContent=total-completed;
+ const percent=total?Math.round(completed/total*100):0;
+ document.getElementById("progressBar").style.width=percent+"%";
+ document.getElementById("progressText").textContent=percent+"% completed";
+
+ renderCategoryProgress();
+}
+
+function renderCategoryProgress(){
+ const area=document.getElementById("categoryProgress");
+ area.innerHTML="";
+ ["Education","Work","Personal","Finance","Health","Other"].forEach(cat=>{
+  const group=tasks.filter(t=>t.category===cat);
+  if(!group.length)return;
+  const done=group.filter(t=>t.completed).length;
+  const percent=Math.round(done/group.length*100);
+  const label=document.createElement("p");
+  label.className="meta";
+  label.textContent=cat+": "+done+" of "+group.length+" completed";
+  const bar=document.createElement("div");
+  bar.className="progress";
+  const fill=document.createElement("div");
+  fill.style.width=percent+"%";
+  bar.appendChild(fill);
+  area.append(label,bar);
+ });
+ if(!area.children.length)area.textContent="Your category progress will appear here.";
+}
+
+renderTasks();
+</script>
+</body>
+  </html>
