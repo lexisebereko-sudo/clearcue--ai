@@ -1,0 +1,415 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClearCue AI - Version 0.10</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#101827;color:#f4f6fb}
+header{text-align:center;padding:22px 14px;background:#17243a}
+header h1{color:#72d5c0;margin:0}
+header p{color:#bdc9da}
+nav{display:flex;flex-wrap:wrap;justify-content:center;gap:7px;padding:12px;background:#1b2940}
+button{border:0;border-radius:8px;padding:11px 14px;background:#30435e;color:white;cursor:pointer}
+button.active,button.primary{background:#168f80}
+button:disabled{opacity:.6}
+main{max-width:850px;margin:auto;padding:18px}
+.view{display:none}
+.view.active{display:block}
+.panel,.task{background:#1b2940;padding:16px;border-radius:12px;margin:12px 0}
+textarea,input,select{width:100%;padding:12px;margin:8px 0;border-radius:8px;border:1px solid #52647d;background:#101827;color:white}
+textarea{min-height:120px}
+.task{border-left:4px solid #72d5c0}
+.task.done{opacity:.6}
+.small{font-size:13px;color:#bdc9da}
+.high{color:#ff8585}
+.medium{color:#ffd27a}
+.low,.good{color:#72d5c0}
+.warning{color:#ffd27a}
+.stat{display:inline-block;background:#263954;padding:14px;border-radius:10px;margin:5px;min-width:105px}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+h2{color:#72d5c0}
+</style>
+</head>
+<body>
+
+<header>
+<h1>ClearCue AI</h1>
+<p>Less confusion. More things done.</p>
+<p class="small">Version 0.10 — Task Intelligence</p>
+</header>
+
+<nav>
+<button class="active" data-page="home">Home</button>
+<button data-page="capture">Quick Capture</button>
+<button data-page="tasks">My Tasks</button>
+<button data-page="deadlines">Deadlines</button>
+<button data-page="insights">Insights</button>
+<button data-page="settings">Settings</button>
+</nav>
+
+<main>
+
+<section id="home" class="view active">
+<h2>Your Dashboard</h2>
+<div id="stats"></div>
+<div class="panel">
+<h3>Welcome to ClearCue</h3>
+<p>Turn everyday messages into organised actions.</p>
+<button class="primary" onclick="openPage('capture')">Capture a message</button>
+</div>
+<div class="panel">
+<h3>Task Intelligence</h3>
+<p>ClearCue now checks possible duplicates, estimates task priority and recognises common deadlines.</p>
+<p class="small">Always review detected information before relying on it.</p>
+</div>
+</section>
+
+<section id="capture" class="view">
+<h2>Quick Capture</h2>
+<div class="panel">
+<p>Paste your message or note.</p>
+<textarea id="message" placeholder="Example: Urgent! Submit my application by Friday. Remember to pay the electricity bill tomorrow."></textarea>
+<button class="primary" onclick="analyse()">Analyse message</button>
+<div id="results"></div>
+</div>
+</section>
+
+<section id="tasks" class="view">
+<h2>My Tasks</h2>
+<div id="taskList"></div>
+</section>
+
+<section id="deadlines" class="view">
+<h2>Deadlines</h2>
+<div id="deadlineList"></div>
+</section>
+
+<section id="insights" class="view">
+<h2>Task Intelligence Insights</h2>
+<div class="panel">
+<div id="insightList"></div>
+</div>
+</section>
+
+<section id="settings" class="view">
+<h2>Settings</h2>
+<div class="panel">
+<label>Preferred language</label>
+<select id="language">
+<option>English</option>
+<option>Setswana</option>
+</select>
+<button class="primary" onclick="saveSettings()">Save settings</button>
+<p id="settingsMessage" class="good"></p>
+</div>
+<div class="panel">
+<h3>About Version 0.10</h3>
+<p>This is a rule-based prototype. It does not yet use a trained AI model or provide guaranteed background notifications.</p>
+<p>Your tasks are saved locally in this browser.</p>
+</div>
+</section>
+
+</main>
+
+<script>
+const KEY="clearcue_tasks_v010";
+let tasks=[];
+
+function save(){
+ localStorage.setItem(KEY,JSON.stringify(tasks));
+}
+
+function load(){
+ try{
+  const saved=localStorage.getItem(KEY);
+  if(saved){tasks=JSON.parse(saved)||[];return}
+  for(const key of ["clearcue_tasks_v09","clearcue_tasks_v081","clearcue_tasks_v08","clearcue_tasks_v07"]){
+   const old=localStorage.getItem(key);
+   if(old){
+    const data=JSON.parse(old);
+    if(Array.isArray(data)){tasks=data;break}
+   }
+  }
+ }catch(e){tasks=[]}
+ save();
+}
+
+function openPage(page){
+ document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+ document.querySelectorAll("nav button").forEach(b=>b.classList.remove("active"));
+ document.getElementById(page).classList.add("active");
+ const button=document.querySelector('nav button[data-page="'+page+'"]');
+ if(button)button.classList.add("active");
+ render();
+}
+
+document.querySelectorAll("nav button").forEach(b=>{
+ b.addEventListener("click",()=>openPage(b.dataset.page));
+});
+
+function splitSentences(text){
+ return text.match(/[^.!?\n]+[.!?]?/g)||[];
+}
+
+const actionPattern=/\b(submit|send|complete|finish|prepare|write|read|study|revise|attend|visit|buy|pay|collect|deliver|book|schedule|check|review|update|renew|apply|register|email|message|contact|call|phone|meet|discuss|arrange|organise|organize|create|bring|return|clean|repair|fix|cancel|confirm|upload|download|print|sign|file|save|remember to|don't forget to|make sure to|need to|have to|must|should|promised to|plan to|ke tshwanetse go)\b/i;
+
+const uncertainPattern=/\b(might|maybe|may|perhaps|possibly|could|if possible|not sure|thinking about|considering|probably)\b/i;
+const negativePattern=/\b(don't|do not|doesn't|does not|never|not yet|no need to|stop|avoid)\b/i;
+
+function priorityOf(sentence){
+ if(/\b(urgent|immediately|asap|right away|emergency|critical|overdue|today|tonight|must do now)\b/i.test(sentence))return "High";
+ if(/\b(important|priority|soon|tomorrow|deadline|by friday|by monday)\b/i.test(sentence))return "Medium";
+ return "Low";
+}
+
+function getDeadline(sentence){
+ const s=sentence.toLowerCase();
+ const today=new Date();
+ const date=new Date(today.getFullYear(),today.getMonth(),today.getDate());
+
+ if(/\btoday\b|\btonight\b/.test(s))return date;
+ if(/\btomorrow\b/.test(s)){date.setDate(date.getDate()+1);return date}
+
+ const days=["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+ for(let i=0;i<days.length;i++){
+  const day=days[i];
+  if(new RegExp("\\b"+day+"\\b").test(s)){
+   let difference=(i-date.getDay()+7)%7;
+   if(/\bnext\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/.test(s)){
+    if(difference===0)difference=7;
+    else difference+=7;
+   }else if(difference===0){
+    difference=7;
+   }
+   date.setDate(date.getDate()+difference);
+   return date;
+  }
+ }
+
+ const explicit=s.match(/\b(?:by|before|on)\s+(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?\b/);
+ if(explicit){
+  let year=explicit[3]?Number(explicit[3]):today.getFullYear();
+  let month=Number(explicit[2])-1;
+  let day=Number(explicit[1]);
+  const result=new Date(year,month,day);
+  if(!explicit[3]&&result<today)result.setFullYear(year+1);
+  if(result.getMonth()===month&&result.getDate()===day)return result;
+ }
+
+ return null;
+}
+
+function dateText(date){
+ if(!date)return "No deadline detected";
+ return date.getFullYear()+"-"+String(date.getMonth()+1).padStart(2,"0")+"-"+String(date.getDate()).padStart(2,"0");
+}
+
+function normalise(text){
+ return text.toLowerCase()
+ .replace(/[^a-z0-9\s]/g," ")
+ .replace(/\b(the|a|an|to|please|my|your|i|me|by|on|for|and|remember|don't|forget)\b/g," ")
+ .replace(/\s+/g," ").trim();
+}
+
+function similarity(a,b){
+ const first=new Set(normalise(a).split(" ").filter(w=>w.length>2));
+ const second=new Set(normalise(b).split(" ").filter(w=>w.length>2));
+ if(!first.size||!second.size)return 0;
+ const common=[...first].filter(w=>second.has(w)).length;
+ return common/Math.max(first.size,second.size);
+}
+
+function findDuplicate(text){
+ return tasks.find(t=>similarity(t.text||"",text)>=0.65);
+}
+
+function explain(sentence,priority,deadline){
+ let reasons=["An action phrase was recognised."];
+ if(priority==="High")reasons.push("Urgency language suggests high priority.");
+ else if(priority==="Medium")reasons.push("Importance or a near deadline suggests medium priority.");
+ else reasons.push("No strong urgency signal was found.");
+ if(deadline)reasons.push("A possible deadline was identified.");
+ if(uncertainPattern.test(sentence))reasons.push("Uncertain wording needs human review.");
+ return reasons.join(" ");
+}
+
+function analyse(){
+ const message=document.getElementById("message").value.trim();
+ const results=document.getElementById("results");
+ results.innerHTML="";
+ if(!message){results.textContent="Please enter a message first.";return}
+
+ let found=[];
+ splitSentences(message).forEach(sentence=>{
+  const clean=sentence.trim();
+  if(!clean||negativePattern.test(clean))return;
+  if(actionPattern.test(clean)){
+   const deadline=getDeadline(clean);
+   found.push({
+    text:clean,
+    priority:priorityOf(clean),
+    deadline:dateText(deadline),
+    uncertain:uncertainPattern.test(clean),
+    duplicate:findDuplicate(clean),
+    reason:explain(clean,priorityOf(clean),deadline)
+   });
+  }
+ });
+
+ if(!found.length){
+  results.textContent="No clear action detected. Try using a specific instruction.";
+  return;
+ }
+
+ found.forEach((item,index)=>{
+  const card=document.createElement("div");
+  card.className="task";
+  const title=document.createElement("strong");
+  title.textContent=item.duplicate?"Possible duplicate detected":"Possible task";
+  card.appendChild(title);
+
+  const p=document.createElement("p");
+  p.textContent=item.text;
+  card.appendChild(p);
+
+  const priority=document.createElement("p");
+  priority.className=item.priority.toLowerCase();
+  priority.textContent="Priority: "+item.priority;
+  card.appendChild(priority);
+
+  const deadline=document.createElement("p");
+  deadline.textContent="Deadline: "+item.deadline;
+  card.appendChild(deadline);
+
+  const reason=document.createElement("p");
+  reason.className="small";
+  reason.textContent=item.reason;
+  card.appendChild(reason);
+
+  if(item.uncertain){
+   const warning=document.createElement("p");
+   warning.className="warning";
+   warning.textContent="Uncertain wording: please review before saving.";
+   card.appendChild(warning);
+  }
+
+  if(item.duplicate){
+   const warning=document.createElement("p");
+   warning.className="warning";
+   warning.textContent="Similar existing task: "+item.duplicate.text;
+   card.appendChild(warning);
+  }
+
+  const saveButton=document.createElement("button");
+  saveButton.className="primary";
+  saveButton.textContent="Confirm and save";
+  saveButton.onclick=()=>{
+   tasks.push({
+    id:Date.now()+index,
+    text:item.text,
+    priority:item.priority,
+    deadline:item.deadline==="No deadline detected"?"":item.deadline,
+    uncertain:item.uncertain,
+    completed:false,
+    reason:item.reason
+   });
+   save();
+   saveButton.textContent="Saved";
+   saveButton.disabled=true;
+   render();
+  };
+  card.appendChild(saveButton);
+  results.appendChild(card);
+ });
+}
+
+function render(){
+ const completed=tasks.filter(t=>t.completed).length;
+ const pending=tasks.length-completed;
+ document.getElementById("stats").innerHTML=
+ '<div class="stat"><strong>'+tasks.length+'</strong><br><span class="small">Total</span></div>'+
+ '<div class="stat"><strong>'+completed+'</strong><br><span class="small">Completed</span></div>'+
+ '<div class="stat"><strong>'+pending+'</strong><br><span class="small">Pending</span></div>'+
+ '<div class="stat"><strong>'+tasks.filter(t=>t.priority==="High"&&!t.completed).length+'</strong><br><span class="small">High priority</span></div>';
+
+ const list=document.getElementById("taskList");
+ list.innerHTML="";
+ if(!tasks.length)list.textContent="No saved tasks yet.";
+ tasks.forEach(task=>{
+  const card=document.createElement("div");
+  card.className="task"+(task.completed?" done":"");
+  const p=document.createElement("p");
+  p.textContent=task.text||"Untitled task";
+  card.appendChild(p);
+
+  const priority=document.createElement("p");
+  priority.className=(task.priority||"Low").toLowerCase();
+  priority.textContent="Priority: "+(task.priority||"Low");
+  card.appendChild(priority);
+
+  const due=document.createElement("p");
+  due.textContent="Deadline: "+(task.deadline||"Not detected");
+  card.appendChild(due);
+
+  const check=document.createElement("input");
+  check.type="checkbox";
+  check.checked=!!task.completed;
+  check.style.width="auto";
+  check.addEventListener("change",()=>{
+   task.completed=check.checked;save();render();
+  });
+  const label=document.createElement("label");
+  label.appendChild(check);
+  label.append(" Completed");
+  card.appendChild(label);
+
+  const del=document.createElement("button");
+  del.textContent="Delete";
+  del.style.marginLeft="12px";
+  del.onclick=()=>{
+   tasks=tasks.filter(t=>t.id!==task.id);save();render();
+  };
+  card.appendChild(del);
+  list.appendChild(card);
+ });
+
+ const deadlines=document.getElementById("deadlineList");
+ deadlines.innerHTML="";
+ const dated=tasks.filter(t=>t.deadline&&!t.completed).sort((a,b)=>a.deadline.localeCompare(b.deadline));
+ if(!dated.length)deadlines.textContent="No upcoming deadlines saved.";
+ dated.forEach(t=>{
+  const p=document.createElement("p");
+  p.textContent=t.deadline+" — "+t.text;
+  deadlines.appendChild(p);
+ });
+
+ const insights=document.getElementById("insightList");
+ insights.innerHTML="";
+ const counts={High:0,Medium:0,Low:0};
+ tasks.forEach(t=>counts[t.priority||"Low"]++);
+ ["High","Medium","Low"].forEach(level=>{
+  const p=document.createElement("p");
+  p.textContent=level+" priority tasks: "+counts[level];
+  insights.appendChild(p);
+ });
+}
+
+function saveSettings(){
+ localStorage.setItem("clearcue_language",document.getElementById("language").value);
+ document.getElementById("settingsMessage").textContent="Settings saved.";
+}
+
+function loadSettings(){
+ document.getElementById("language").value=localStorage.getItem("clearcue_language")||"English";
+}
+
+load();
+loadSettings();
+render();
+</script>
+</body>
+  </html>
+  
