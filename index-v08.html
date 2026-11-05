@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101827">
+<title>ClearCue AI — Version 0.8</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0b1220;color:#f3f6fb;font:15px/1.5 system-ui,sans-serif}
+main{max-width:560px;margin:auto;padding:20px 16px 100px}
+header{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.logo{background:#8ce0c0;color:#10221e;padding:9px 13px;border-radius:12px;font-weight:bold}
+.tag,.pill{color:#8ce0c0;border:1px solid #477d70;border-radius:20px;padding:5px 9px;font-size:11px}
+h1{font-size:29px;line-height:1.2;margin:28px 0 5px}
+h2{font-size:18px}
+p,.muted{color:#9cabc0}
+.card{background:#152238;border:1px solid #2b3b52;border-radius:17px;padding:16px;margin:14px 0}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:18px 0}
+.stat{background:#20344a;border-radius:14px;padding:15px}
+.stat strong{display:block;font-size:27px;color:#8ce0c0}
+.stat span{font-size:12px;color:#c0cede}
+button,select,textarea,input{font:inherit}
+button{border:0;border-radius:11px;padding:11px;background:#8ce0c0;color:#10221e;font-weight:bold;cursor:pointer}
+.primary{width:100%;margin-top:10px}
+.secondary{background:#293b53;color:white}
+textarea,input[type=text],input[type=date],input[type=time]{width:100%;padding:12px;border-radius:11px;border:1px solid #35465d;background:#0d1726;color:white}
+textarea{min-height:95px}
+select{background:#0d1726;color:white;border:1px solid #35465d;border-radius:10px;padding:10px}
+.task{padding:13px 0;border-bottom:1px solid #35465d}
+.task:last-child{border:0}
+.taskrow{display:flex;gap:9px;align-items:flex-start}
+.taskrow input{margin-top:5px;width:19px;height:19px}
+.taskbody{flex:1;min-width:0;overflow-wrap:anywhere}
+.done{text-decoration:line-through;opacity:.55}
+.small{font-size:12px;color:#9cabc0}
+.delete{background:#49303a;color:#ffd4d4;padding:7px 9px;font-size:11px}
+.status{display:inline-block;font-size:10px;padding:3px 7px;border-radius:8px;background:#203c39;color:#a6e9d3;margin:4px 3px 4px 0}
+.status.overdue{background:#4a2932;color:#ffc2c8}
+.status.today{background:#594525;color:#ffe0a1}
+.nav{position:fixed;bottom:0;left:0;right:0;background:#101b2c;border-top:1px solid #304158;display:flex;justify-content:center;gap:4px;padding:9px 5px;z-index:5}
+.nav button{flex:1;max-width:125px;background:transparent;color:#aebbd0;font-size:11px;padding:9px 3px}
+.nav button.active{background:#203b3a;color:#9ce8cc}
+.view{display:none}.view.active{display:block}
+.notice{background:#202e43;border-radius:11px;padding:12px;font-size:12px;color:#c6d2e2}
+.bar{height:10px;background:#293b53;border-radius:20px;overflow:hidden}
+.bar div{height:100%;background:#8ce0c0;width:0}
+footer{text-align:center;color:#8291a5;font-size:11px;margin-top:25px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.row>*{flex:1}
+label{display:block;font-size:12px;color:#c0cede;margin:10px 0 5px}
+</style>
+</head>
+<body>
+<main>
+<header><div class="logo">C · ClearCue AI</div><span class="tag">VERSION 0.8</span></header>
+
+<section class="view active" id="dashboard">
+<h1>Welcome to ClearCue.</h1><p>Your day, made clearer.</p>
+<div class="stats">
+<div class="stat"><strong id="total">0</strong><span>Total tasks</span></div>
+<div class="stat"><strong id="completed">0</strong><span>Completed</span></div>
+<div class="stat"><strong id="pending">0</strong><span>Pending</span></div>
+<div class="stat"><strong id="overdueCount">0</strong><span>Overdue</span></div>
+</div>
+<div class="card"><h2>Your progress</h2><div class="bar"><div id="progressBar"></div></div><p id="progressText" class="small">0% of tasks completed</p></div>
+<div class="card"><h2>Quick capture</h2><textarea id="quickMessage" placeholder="What do you need to get done?"></textarea><button class="primary" onclick="captureQuick()">Add to my tasks</button></div>
+<div class="card"><h2>Needs attention</h2><div id="attentionPreview"></div></div>
+</section>
+
+<section class="view" id="tasks">
+<h1>My tasks</h1><p>Manage tasks and set a reminder date.</p>
+<div class="card"><div id="taskList"></div><p id="taskEmpty" class="muted">No tasks saved yet.</p></div>
+</section>
+
+<section class="view" id="deadlines">
+<h1>Deadlines & reminders</h1><p>See which tasks need attention.</p>
+<div class="card"><div id="deadlineList"></div><p id="deadlineEmpty" class="muted">No dated tasks yet.</p></div>
+<div class="notice">For a reliable reminder, add an exact date and time to a task. Browser notifications require permission and may depend on your browser being open.</div>
+</section>
+
+<section class="view" id="progress">
+<h1>My progress</h1><p>See how you're moving forward.</p>
+<div class="card"><h2>Completion rate</h2><strong id="rate" style="font-size:35px;color:#8ce0c0">0%</strong><div class="bar"><div id="progressBar2"></div></div><p id="progressDetail" class="small">No tasks recorded yet.</p></div>
+</section>
+
+<section class="view" id="settings">
+<h1>Settings</h1><p>Personalise your workspace.</p>
+<div class="card"><h2>Preferred language</h2><select id="language" onchange="changeLanguage()"><option>English</option><option>Setswana</option></select><p class="small">This saves your preference. Full translation is not yet available.</p></div>
+<div class="card"><h2>Browser reminders</h2><p id="permissionText" class="small">Notifications have not been enabled.</p><button class="secondary" onclick="enableNotifications()">Enable notifications</button></div>
+<div class="card"><h2>About ClearCue</h2><p>Less confusion. More things done.</p><p class="small">Version 0.8 · Rule-based prototype</p></div>
+<div class="card"><h2>Manage your data</h2><button class="secondary" onclick="clearCompleted()">Clear completed tasks</button><button class="secondary" style="margin-top:10px" onclick="clearAll()">Delete all tasks</button></div>
+<p class="notice">Tasks are stored in this browser on this device. They are not synced or backed up online.</p>
+</section>
+<footer>CLEARCUE AI · VERSION 0.8<br>Early prototype · Review all task suggestions</footer>
+</main>
+<nav class="nav">
+<button class="active" onclick="showView('dashboard',this)">⌂<br>Home</button>
+<button onclick="showView('tasks',this)">☷<br>Tasks</button>
+<button onclick="showView('deadlines',this)">◷<br>Deadlines</button>
+<button onclick="showView('progress',this)">▥<br>Progress</button>
+<button onclick="showView('settings',this)">⚙<br>Settings</button>
+</nav>
+<script>
+const KEY="clearcue_tasks_v08";
+let tasks=[];
+try{
+  const saved=localStorage.getItem(KEY);
+  const old=localStorage.getItem("clearcue_tasks_v07")||localStorage.getItem("clearcue_tasks_v06")||localStorage.getItem("clearcue_tasks_v05");
+  const parsed=JSON.parse(saved||old||"[]");
+  if(Array.isArray(parsed)) tasks=parsed.map(t=>({...t,id:String(t.id||Date.now()+Math.random()),title:String(t.title||""),source:String(t.source||t.title||""),deadline:String(t.deadline||t.date||"No clear deadline detected"),language:String(t.language||"English"),uncertain:!!t.uncertain,done:!!t.done,reminderDate:String(t.reminderDate||""),reminderTime:String(t.reminderTime||"09:00"),reminderSent:!!t.reminderSent}));
+}catch(e){tasks=[]}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(tasks));render()}catch(e){alert("Unable to save tasks in this browser.")}}
+function showView(id,btn){document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));document.getElementById(id).classList.add("active");document.querySelectorAll(".nav button").forEach(b=>b.classList.remove("active"));btn.classList.add("active");render()}
+const enVerbs=["pay","call","send","submit","buy","collect","book","meet","visit","finish","complete","prepare","bring","renew","check","reply","contact","attend","read","write","arrange","register","confirm","deliver","apply","return","print","sign","review","discuss","cancel","order","organise","organize","schedule"];
+const tnVerbs=["duela","letsa","romela","isa","tlisa","reka","kopana","kwadisa","netefatsa","rulaganya","baakanya","tsenya","ntsha","bala","kwala","tlhatlhoba","bitsa","busetsa"];
+function hasWord(s,w){return new RegExp("(^|[^\\p{L}])"+w+"([^\\p{L}]|$)","iu").test(s)}
+function analyse(s){
+ const tn=tnVerbs.find(v=>hasWord(s,v)),en=enVerbs.find(v=>hasWord(s,v)),language=tn?"Setswana":"English",verb=tn||en;
+ if(!verb)return null;
+ const negative=language==="English"?/\b(don't|do not|doesn't|does not|never|mustn't|must not|shouldn't|should not|avoid)\b/i.test(s):/\b(se ka|ga ke|ga a|ga ba|ga re)\b/i.test(s);
+ const uncertain=language==="English"?/\b(might|may|maybe|could|possibly|perhaps|if|probably|not sure)\b/i.test(s):/\b(gongwe|nka|go ka nna)\b/i.test(s);
+ const pattern=language==="English"?/\b(today|tomorrow|tonight|next week|next month|this week|this month|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+|\d{1,2}\\/\d{1,2}(?:\\/\d{2,4})?)\b/i:/\b(gompieno|kamoso|mantaga|labobedi|laboraro|labone|labotlhano|matlhatso)\b/i;
+ const d=s.match(pattern);
+ return {language,negative,uncertain,deadline:d?d[0]:"No clear deadline detected"};
+}
+function addMessage(message){
+ const sentences=message.replace(/\n+/g,". ").split(/(?<=[.!?])\s+/).map(s=>s.trim()).filter(Boolean);let added=0,ignored=0;
+ sentences.forEach(sentence=>{const r=analyse(sentence);if(!r)return;if(r.negative){ignored++;return}if(tasks.some(t=>t.source.toLowerCase()===sentence.toLowerCase()))return;tasks.unshift({id:Date.now().toString()+Math.random().toString(16).slice(2),title:sentence.replace(/[.!?]+$/,""),source:sentence,deadline:r.deadline,language:r.language,uncertain:r.uncertain,done:false,reminderDate:"",reminderTime:"09:00",reminderSent:false});added++});
+ save();return {added,ignored};
+}
+function captureQuick(){const el=document.getElementById("quickMessage");if(!el.value.trim()){alert("Enter a message first.");return}const r=addMessage(el.value.trim());el.value="";alert(r.added+" task(s) added. "+r.ignored+" negative instruction(s) ignored. Please review suggestions.")}
+function toggleTask(id){const t=tasks.find(x=>x.id===id);if(t){t.done=!t.done;save()}}
+function deleteTask(id){tasks=tasks.filter(t=>t.id!==id);save()}
+function setReminder(id,field,value){const t=tasks.find(x=>x.id===id);if(!t)return;t[field]=value;t.reminderSent=false;save()}
+function reminderStatus(t){
+ if(t.done)return "Completed";
+ if(t.reminderDate){const due=new Date(t.reminderDate+"T"+(t.reminderTime||"09:00")+":00");const now=new Date();if(due.toDateString()===now.toDateString())return "Due today";if(due<now)return "Overdue";return "Reminder set"}
+ const d=t.deadline.toLowerCase();if(d.includes("tomorrow"))return "Tomorrow (phrase only)";if(d.includes("today")||d.includes("tonight")||d.includes("gompieno"))return "Due today (phrase only)";return t.deadline==="No clear deadline detected"?"No date set":"Date phrase detected";
+}
+function renderTask(t){
+ const status=reminderStatus(t),cls=status==="Overdue"?"overdue":status==="Due today"?"today":"";
+ return `<div class="task"><div class="taskrow"><input type="checkbox" ${t.done?"checked":""} aria-label="Complete task" onchange="toggleTask('${t.id}')"><div class="taskbody ${t.done?"done":""}"><strong>${esc(t.title)}</strong><br><span class="status ${cls}">${esc(status)}</span>${t.uncertain?'<span class="status">Needs confirmation</span>':""}<div class="small">Detected: ${esc(t.deadline)}</div><div class="small">Source: ${esc(t.source)}</div><label>Exact reminder date</label><input type="date" value="${esc(t.reminderDate||"")}" onchange="setReminder('${t.id}','reminderDate',this.value)"><label>Reminder time</label><input type="time" value="${esc(t.reminderTime||"09:00")}" onchange="setReminder('${t.id}','reminderTime',this.value)"><button class="secondary" style="margin-top:8px" onclick="scheduleReminder('${t.id}')">Check reminder</button></div><button class="delete" onclick="deleteTask('${t.id}')">Delete</button></div></div>`;
+}
+function render(){
+ const total=tasks.length,completed=tasks.filter(t=>t.done).length,pending=total-completed,overdue=tasks.filter(t=>!t.done&&reminderStatus(t)==="Overdue").length,rate=total?Math.round(completed/total*100):0;
+ document.getElementById("total").textContent=total;document.getElementById("completed").textContent=completed;document.getElementById("pending").textContent=pending;document.getElementById("overdueCount").textContent=overdue;
+ document.getElementById("progressBar").style.width=rate+"%";document.getElementById("progressBar2").style.width=rate+"%";document.getElementById("progressText").textContent=rate+"% of tasks completed";document.getElementById("rate").textContent=rate+"%";document.getElementById("progressDetail").textContent=completed+" completed out of "+total+" total tasks.";
+ document.getElementById("taskList").innerHTML=tasks.map(renderTask).join("");document.getElementById("taskEmpty").hidden=total>0;
+ const active=tasks.filter(t=>!t.done&&((t.reminderDate)||t.deadline!=="No clear deadline detected"));
+ document.getElementById("deadlineList").innerHTML=active.map(renderTask).join("");document.getElementById("deadlineEmpty").hidden=active.length>0;
+ const attention=tasks.filter(t=>!t.done&&(reminderStatus(t)==="Overdue"||reminderStatus(t)==="Due today"||t.uncertain));
+ document.getElementById("attentionPreview").innerHTML=attention.length?attention.slice(0,4).map(t=>`<div class="task"><strong>${esc(t.title)}</strong><div class="small">${esc(reminderStatus(t))}</div></div>`).join(""):'<p class="muted">Nothing needs attention right now.</p>';
+ document.getElementById("language").value=localStorage.getItem("clearcue_language_v08")||localStorage.getItem("clearcue_language_v07")||"English";
+ const p=("Notification" in window)?Notification.permission:"unsupported";
+ document.getElementById("permissionText").textContent=p==="granted"?"Notifications are allowed in this browser.":p==="denied"?"Notifications are blocked in browser settings.":p==="unsupported"?"This browser does not support notifications.":"Notifications have not been enabled.";
+}
+function scheduleReminder(id){
+ const t=tasks.find(x=>x.id===id);if(!t)return;
+ if(!t.reminderDate){alert("Please choose an exact reminder date first.");return}
+ const when=new Date(t.reminderDate+"T"+(t.reminderTime||"09:00")+":00");
+ if(when<=new Date()){alert("Choose a future date and time.");return}
+ if(!("Notification" in window)){alert("Notifications are not supported in this browser.");return}
+ if(Notification.permission!=="granted"){alert("First enable notifications in Settings, then try again.");return}
+ alert("Your reminder date and time are saved. Keep ClearCue open near the scheduled time; this prototype does not run background reminders when the browser is closed.");
+}
+async function enableNotifications(){if(!("Notification" in window)){alert("Notifications are not supported in this browser.");return}try{await Notification.requestPermission();render();if(Notification.permission==="granted")alert("Notifications enabled. Reminder scheduling is still limited while this prototype is open.")}catch(e){alert("Could not request notification permission.")}}
+function changeLanguage(){localStorage.setItem("clearcue_language_v08",document.getElementById("language").value)}
+function clearCompleted(){tasks=tasks.filter(t=>!t.done);save()}
+function clearAll(){if(!confirm("Delete all saved tasks? This cannot be undone."))return;tasks=[];save()}
+render();
+</script>
+</body>
+</html>
