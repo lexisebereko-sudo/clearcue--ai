@@ -1,0 +1,443 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClearCue AI - Version 0.11</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#101827;color:#f4f6fb}
+header{text-align:center;padding:22px;background:#17243a}
+header h1{margin:0;color:#72d5c0}
+header p{color:#bdc9da}
+nav{display:flex;flex-wrap:wrap;justify-content:center;gap:7px;padding:12px;background:#1b2940}
+button{border:0;border-radius:8px;padding:11px 14px;background:#30435e;color:white;cursor:pointer}
+button.active,button.primary{background:#168f80}
+button.danger{background:#9d3d49}
+main{max-width:900px;margin:auto;padding:16px}
+.view{display:none}
+.view.active{display:block}
+.panel,.task{background:#1b2940;padding:16px;border-radius:12px;margin:12px 0}
+.task{border-left:4px solid #72d5c0}
+.task.done{opacity:.6}
+.high{color:#ff8585}
+.medium{color:#ffd27a}
+.low,.good{color:#72d5c0}
+.warning{color:#ffbd72}
+.small{font-size:13px;color:#bdc9da}
+.stat{display:inline-block;background:#263954;padding:14px;border-radius:10px;margin:5px;min-width:105px}
+input,select{width:100%;padding:12px;margin:8px 0;border-radius:8px;border:1px solid #52647d;background:#101827;color:white}
+textarea{width:100%;min-height:110px;padding:12px;background:#101827;color:white;border:1px solid #52647d;border-radius:8px}
+.progress{height:13px;background:#30435e;border-radius:20px;overflow:hidden}
+.progress div{height:100%;background:#72d5c0;width:0}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+h2{color:#72d5c0}
+</style>
+</head>
+<body>
+
+<header>
+<h1>ClearCue AI</h1>
+<p>Less confusion. More things done.</p>
+<p class="small">Version 0.11 — Advanced Dashboard</p>
+</header>
+
+<nav>
+<button class="active" data-page="home">Home</button>
+<button data-page="capture">Quick Capture</button>
+<button data-page="tasks">My Tasks</button>
+<button data-page="priority">High Priority</button>
+<button data-page="progress">Progress</button>
+<button data-page="settings">Settings</button>
+</nav>
+
+<main>
+
+<section id="home" class="view active">
+<h2>Your Dashboard</h2>
+<div id="stats"></div>
+<div class="panel">
+<h3>Overall progress</h3>
+<div class="progress"><div id="homeProgress"></div></div>
+<p id="progressText" class="small"></p>
+</div>
+<div class="panel">
+<h3>Needs your attention</h3>
+<div id="attention"></div>
+</div>
+<div class="panel">
+<h3>Welcome to ClearCue</h3>
+<p>Capture instructions, review suggested tasks and organise your day.</p>
+<button class="primary" onclick="openPage('capture')">Capture a message</button>
+</div>
+</section>
+
+<section id="capture" class="view">
+<h2>Quick Capture</h2>
+<div class="panel">
+<textarea id="message" placeholder="Example: Urgent! Submit my application today. Pay the electricity bill tomorrow."></textarea>
+<button class="primary" onclick="analyse()">Analyse message</button>
+<div id="results"></div>
+</div>
+</section>
+
+<section id="tasks" class="view">
+<h2>My Tasks</h2>
+<input id="search" placeholder="Search tasks..." oninput="renderTasks()">
+<select id="filterPriority" onchange="renderTasks()">
+<option value="All">All priorities</option>
+<option value="High">High priority</option>
+<option value="Medium">Medium priority</option>
+<option value="Low">Low priority</option>
+</select>
+<select id="filterStatus" onchange="renderTasks()">
+<option value="All">All tasks</option>
+<option value="Pending">Pending</option>
+<option value="Completed">Completed</option>
+<option value="Overdue">Overdue</option>
+</select>
+<div id="taskList"></div>
+</section>
+
+<section id="priority" class="view">
+<h2>High Priority Tasks</h2>
+<p class="small">Tasks marked High that are not yet completed.</p>
+<div id="priorityList"></div>
+</section>
+
+<section id="progress" class="view">
+<h2>Your Progress</h2>
+<div class="panel">
+<h3>Completion rate</h3>
+<div class="progress"><div id="progressBar"></div></div>
+<p id="progressDetails"></p>
+</div>
+<div class="panel">
+<div id="priorityStats"></div>
+</div>
+</section>
+
+<section id="settings" class="view">
+<h2>Settings</h2>
+<div class="panel">
+<label>Preferred language</label>
+<select id="language">
+<option>English</option>
+<option>Setswana</option>
+</select>
+<button class="primary" onclick="saveSettings()">Save settings</button>
+<p id="settingsMessage" class="good"></p>
+</div>
+<div class="panel">
+<h3>About Version 0.11</h3>
+<p>Rule-based task detection, local browser storage and dashboard organisation.</p>
+<p class="small">This prototype does not yet provide guaranteed background reminders or cloud synchronisation.</p>
+</div>
+</section>
+
+</main>
+
+<script>
+const KEY="clearcue_tasks_v011";
+let tasks=[];
+
+function save(){
+ localStorage.setItem(KEY,JSON.stringify(tasks));
+}
+
+function load(){
+ try{
+  const saved=localStorage.getItem(KEY);
+  if(saved!==null){
+   tasks=JSON.parse(saved)||[];
+   return;
+  }
+  for(const key of ["clearcue_tasks_v010","clearcue_tasks_v09","clearcue_tasks_v081","clearcue_tasks_v08","clearcue_tasks_v07"]){
+   const old=localStorage.getItem(key);
+   if(old){
+    const data=JSON.parse(old);
+    if(Array.isArray(data)){
+     tasks=data.map((t,i)=>({
+      ...t,
+      id:t.id??Date.now()+i,
+      priority:t.priority||"Low",
+      completed:!!t.completed,
+      deadline:t.deadline||""
+     }));
+     break;
+    }
+   }
+  }
+ }catch(e){tasks=[]}
+ save();
+}
+
+function openPage(page){
+ document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+ document.querySelectorAll("nav button").forEach(b=>b.classList.remove("active"));
+ document.getElementById(page).classList.add("active");
+ const button=document.querySelector('nav button[data-page="'+page+'"]');
+ if(button)button.classList.add("active");
+ render();
+}
+
+document.querySelectorAll("nav button").forEach(b=>{
+ b.addEventListener("click",()=>openPage(b.dataset.page));
+});
+
+function isOverdue(task){
+ if(!task.deadline||task.completed)return false;
+ const due=new Date(task.deadline+"T00:00:00");
+ const today=new Date();
+ today.setHours(0,0,0,0);
+ return !isNaN(due.getTime())&&due<today;
+}
+
+function splitSentences(text){
+ return text.match(/[^.!?\n]+[.!?]?/g)||[];
+}
+
+const actionPattern=/\b(submit|send|complete|finish|prepare|write|read|study|revise|attend|visit|buy|pay|collect|deliver|book|schedule|check|review|update|renew|apply|register|email|message|contact|call|phone|meet|discuss|arrange|organise|organize|create|bring|return|clean|repair|fix|cancel|confirm|upload|download|print|sign|file|save|remember to|don't forget to|make sure to|need to|have to|must|should|promised to|plan to)\b/i;
+const uncertainPattern=/\b(might|maybe|may|perhaps|possibly|could|if possible|not sure|thinking about|considering|probably)\b/i;
+const negativePattern=/\b(don't|do not|doesn't|does not|never|not yet|no need to|stop|avoid)\b/i;
+
+function priorityOf(s){
+ if(/\b(urgent|immediately|asap|right away|emergency|critical|overdue|today|tonight)\b/i.test(s))return "High";
+ if(/\b(important|priority|soon|tomorrow|deadline|by friday|by monday)\b/i.test(s))return "Medium";
+ return "Low";
+}
+
+function getDeadline(s){
+ const text=s.toLowerCase();
+ const now=new Date();
+ const date=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+ if(/\btoday\b|\btonight\b/.test(text))return dateText(date);
+ if(/\btomorrow\b/.test(text)){
+  date.setDate(date.getDate()+1);
+  return dateText(date);
+ }
+ const days=["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+ for(let i=0;i<7;i++){
+  if(new RegExp("\\b"+days[i]+"\\b").test(text)){
+   let diff=(i-date.getDay()+7)%7;
+   if(/\bnext\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/.test(text)){
+    diff=diff===0?7:diff+7;
+   }else if(diff===0)diff=7;
+   date.setDate(date.getDate()+diff);
+   return dateText(date);
+  }
+ }
+ return "";
+}
+
+function dateText(d){
+ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+
+function normalise(s){
+ return s.toLowerCase().replace(/[^a-z0-9\s]/g," ")
+ .replace(/\b(the|a|an|to|please|my|your|i|me|by|on|for|and|remember|don't|forget)\b/g," ")
+ .replace(/\s+/g," ").trim();
+}
+
+function similarity(a,b){
+ const first=new Set(normalise(a).split(" ").filter(w=>w.length>2));
+ const second=new Set(normalise(b).split(" ").filter(w=>w.length>2));
+ if(!first.size||!second.size)return 0;
+ const common=[...first].filter(w=>second.has(w)).length;
+ return common/Math.max(first.size,second.size);
+}
+
+function findDuplicate(text){
+ return tasks.find(t=>similarity(t.text||"",text)>=0.65);
+}
+
+function analyse(){
+ const message=document.getElementById("message").value.trim();
+ const results=document.getElementById("results");
+ results.innerHTML="";
+ if(!message){results.textContent="Please enter a message first.";return}
+ let found=[];
+ splitSentences(message).forEach(s=>{
+  const clean=s.trim();
+  if(!clean||negativePattern.test(clean)||!actionPattern.test(clean))return;
+  found.push({
+   text:clean,
+   priority:priorityOf(clean),
+   deadline:getDeadline(clean),
+   uncertain:uncertainPattern.test(clean),
+   duplicate:findDuplicate(clean)
+  });
+ });
+ if(!found.length){results.textContent="No clear actions detected.";return}
+ found.forEach((item,index)=>{
+  const card=document.createElement("div");
+  card.className="task";
+  const title=document.createElement("strong");
+  title.textContent=item.duplicate?"Possible duplicate":"Possible task";
+  card.appendChild(title);
+  const p=document.createElement("p");
+  p.textContent=item.text;
+  card.appendChild(p);
+  const info=document.createElement("p");
+  info.className=item.priority.toLowerCase();
+  info.textContent="Priority: "+item.priority;
+  card.appendChild(info);
+  const due=document.createElement("p");
+  due.textContent="Deadline: "+(item.deadline||"Not detected");
+  card.appendChild(due);
+  if(item.uncertain||item.duplicate){
+   const warning=document.createElement("p");
+   warning.className="warning";
+   warning.textContent=item.uncertain?"Uncertain wording — review before saving.":"Similar task already exists — check before saving.";
+   card.appendChild(warning);
+  }
+  const button=document.createElement("button");
+  button.className="primary";
+  button.textContent="Confirm and save";
+  button.onclick=()=>{
+   tasks.push({
+    id:Date.now()+index,
+    text:item.text,
+    priority:item.priority,
+    deadline:item.deadline,
+    uncertain:item.uncertain,
+    completed:false
+   });
+   save();
+   button.textContent="Saved";
+   button.disabled=true;
+   render();
+  };
+  card.appendChild(button);
+  results.appendChild(card);
+ });
+}
+
+function makeTaskCard(task){
+ const card=document.createElement("div");
+ card.className="task"+(task.completed?" done":"");
+ const p=document.createElement("p");
+ p.textContent=task.text||"Untitled task";
+ card.appendChild(p);
+
+ const priority=document.createElement("p");
+ priority.className=(task.priority||"Low").toLowerCase();
+ priority.textContent="Priority: "+(task.priority||"Low");
+ card.appendChild(priority);
+
+ const due=document.createElement("p");
+ due.textContent="Deadline: "+(task.deadline||"Not detected");
+ card.appendChild(due);
+
+ if(isOverdue(task)){
+  const warning=document.createElement("p");
+  warning.className="warning";
+  warning.textContent="OVERDUE — this task has passed its saved deadline.";
+  card.appendChild(warning);
+ }
+
+ const label=document.createElement("label");
+ const check=document.createElement("input");
+ check.type="checkbox";
+ check.checked=!!task.completed;
+ check.style.width="auto";
+ check.addEventListener("change",()=>{
+  task.completed=check.checked;save();render();
+ });
+ label.appendChild(check);
+ label.append(" Completed");
+ card.appendChild(label);
+
+ const del=document.createElement("button");
+ del.className="danger";
+ del.textContent="Delete";
+ del.style.marginLeft="12px";
+ del.onclick=()=>{
+  tasks=tasks.filter(t=>t.id!==task.id);save();render();
+ };
+ card.appendChild(del);
+ return card;
+}
+
+function renderTasks(){
+ const list=document.getElementById("taskList");
+ if(!list)return;
+ list.innerHTML="";
+ const query=(document.getElementById("search").value||"").toLowerCase();
+ const priority=document.getElementById("filterPriority").value;
+ const status=document.getElementById("filterStatus").value;
+ const filtered=tasks.filter(t=>{
+  const matchesText=(t.text||"").toLowerCase().includes(query);
+  const matchesPriority=priority==="All"||(t.priority||"Low")===priority;
+  let matchesStatus=true;
+  if(status==="Pending")matchesStatus=!t.completed;
+  if(status==="Completed")matchesStatus=!!t.completed;
+  if(status==="Overdue")matchesStatus=isOverdue(t);
+  return matchesText&&matchesPriority&&matchesStatus;
+ });
+ if(!filtered.length){list.textContent="No matching tasks found.";return}
+ filtered.forEach(t=>list.appendChild(makeTaskCard(t)));
+}
+
+function render(){
+ const completed=tasks.filter(t=>t.completed).length;
+ const total=tasks.length;
+ const rate=total?Math.round(completed/total*100):0;
+ const overdue=tasks.filter(isOverdue).length;
+ const pending=total-completed;
+
+ document.getElementById("stats").innerHTML=
+ '<div class="stat"><strong>'+total+'</strong><br><span class="small">Total</span></div>'+
+ '<div class="stat"><strong>'+pending+'</strong><br><span class="small">Pending</span></div>'+
+ '<div class="stat"><strong>'+completed+'</strong><br><span class="small">Completed</span></div>'+
+ '<div class="stat"><strong>'+overdue+'</strong><br><span class="small">Overdue</span></div>';
+
+ document.getElementById("homeProgress").style.width=rate+"%";
+ document.getElementById("progressText").textContent=rate+"% of saved tasks completed.";
+ document.getElementById("progressBar").style.width=rate+"%";
+ document.getElementById("progressDetails").textContent=completed+" completed out of "+total+" total tasks.";
+
+ const attention=document.getElementById("attention");
+ attention.innerHTML="";
+ const urgent=tasks.filter(t=>!t.completed&&(t.priority==="High"||isOverdue(t)));
+ if(!urgent.length)attention.textContent="Nothing urgent is currently flagged.";
+ urgent.forEach(t=>{
+  const p=document.createElement("p");
+  p.textContent=(isOverdue(t)?"OVERDUE: ":"HIGH PRIORITY: ")+t.text;
+  attention.appendChild(p);
+ });
+
+ const high=document.getElementById("priorityList");
+ high.innerHTML="";
+ const highTasks=tasks.filter(t=>t.priority==="High"&&!t.completed);
+ if(!highTasks.length)high.textContent="No pending high-priority tasks.";
+ highTasks.forEach(t=>high.appendChild(makeTaskCard(t)));
+
+ const counts={High:0,Medium:0,Low:0};
+ tasks.forEach(t=>counts[t.priority||"Low"]++);
+ document.getElementById("priorityStats").innerHTML=
+ "<p>High priority: "+counts.High+"</p>"+
+ "<p>Medium priority: "+counts.Medium+"</p>"+
+ "<p>Low priority: "+counts.Low+"</p>";
+
+ renderTasks();
+}
+
+function saveSettings(){
+ localStorage.setItem("clearcue_language",document.getElementById("language").value);
+ document.getElementById("settingsMessage").textContent="Settings saved.";
+}
+
+function loadSettings(){
+ document.getElementById("language").value=localStorage.getItem("clearcue_language")||"English";
+}
+
+load();
+loadSettings();
+render();
+</script>
+</body>
+  </html>
+  
