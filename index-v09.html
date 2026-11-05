@@ -1,0 +1,310 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClearCue AI - Version 0.9</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#101827;color:#f4f6fb}
+header{padding:22px 16px;background:#17243a;text-align:center}
+header h1{margin:0;color:#72d5c0}
+header p{color:#bdc9da;margin-bottom:0}
+nav{display:flex;flex-wrap:wrap;justify-content:center;gap:7px;padding:12px;background:#1b2940}
+button{border:0;border-radius:8px;padding:11px 14px;background:#263954;color:white;cursor:pointer}
+nav button.active,button.primary{background:#168f80}
+main{max-width:850px;margin:auto;padding:18px}
+.view{display:none}
+.view.active{display:block}
+.panel,.task{background:#1b2940;padding:16px;border-radius:12px;margin:12px 0}
+textarea,input,select{width:100%;padding:12px;margin:8px 0;border-radius:8px;border:1px solid #52647d;background:#101827;color:white}
+textarea{min-height:120px;resize:vertical}
+.task{border-left:4px solid #72d5c0}
+.task.done{opacity:.6}
+.task p{line-height:1.5}
+.small{font-size:13px;color:#bdc9da}
+.warning{color:#ffd27a}
+.good{color:#72d5c0}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.stat{display:inline-block;background:#263954;padding:15px;border-radius:10px;margin:5px;min-width:110px}
+h2{color:#72d5c0}
+</style>
+</head>
+<body>
+
+<header>
+<h1>ClearCue AI</h1>
+<p>Less confusion. More things done.</p>
+<p class="small">Version 0.9 — Smarter Task Detection</p>
+</header>
+
+<nav>
+<button class="active" data-page="home">Home</button>
+<button data-page="capture">Quick Capture</button>
+<button data-page="tasks">My Tasks</button>
+<button data-page="insights">Insights</button>
+<button data-page="settings">Settings</button>
+</nav>
+
+<main>
+
+<section id="home" class="view active">
+<h2>Your Dashboard</h2>
+<div id="stats"></div>
+<div class="panel">
+<h3>Welcome to ClearCue</h3>
+<p>Turn everyday messages and notes into clear, manageable actions.</p>
+<button class="primary" onclick="openPage('capture')">Capture a message</button>
+</div>
+<div class="panel">
+<h3>How ClearCue works</h3>
+<p>1. Paste a message.</p>
+<p>2. ClearCue identifies possible actions.</p>
+<p>3. Review uncertainty and duplicate warnings.</p>
+<p>4. Confirm the tasks you want to save.</p>
+</div>
+</section>
+
+<section id="capture" class="view">
+<h2>Quick Capture</h2>
+<div class="panel">
+<p>Paste a message, note or instruction below.</p>
+<textarea id="message" placeholder="Example: Please submit the application by Friday. Remember to call the school tomorrow. I might pay the electricity bill next week."></textarea>
+<button class="primary" onclick="analyse()">Analyse message</button>
+<div id="results"></div>
+</div>
+</section>
+
+<section id="tasks" class="view">
+<h2>My Tasks</h2>
+<div id="taskList"></div>
+<button onclick="clearCompleted()">Clear completed tasks</button>
+</section>
+
+<section id="insights" class="view">
+<h2>Detection Insights</h2>
+<div class="panel">
+<p>ClearCue explains why it identified a possible action.</p>
+<div id="insightList"></div>
+</div>
+</section>
+
+<section id="settings" class="view">
+<h2>Settings</h2>
+<div class="panel">
+<label>Preferred language</label>
+<select id="language">
+<option value="English">English</option>
+<option value="Setswana">Setswana</option>
+</select>
+<p class="small">This setting records your preference. Full language translation is not yet available.</p>
+<button class="primary" onclick="saveSettings()">Save settings</button>
+<p id="settingsMessage" class="good"></p>
+</div>
+<div class="panel">
+<h3>About this version</h3>
+<p>ClearCue 0.9 uses rule-based detection. It does not yet use a trained AI model.</p>
+</div>
+</section>
+
+</main>
+
+<script>
+const STORAGE_KEY="clearcue_tasks_v09";
+let tasks=[];
+
+function loadTasks(){
+ try{
+  let saved=localStorage.getItem(STORAGE_KEY);
+  if(saved){tasks=JSON.parse(saved)||[];return}
+  const oldKeys=["clearcue_tasks_v081","clearcue_tasks_v08","clearcue_tasks_v07"];
+  for(const key of oldKeys){
+   const old=localStorage.getItem(key);
+   if(old){
+    const data=JSON.parse(old);
+    if(Array.isArray(data)){tasks=data;break}
+   }
+  }
+ }catch(e){tasks=[]}
+ saveTasks();
+}
+
+function saveTasks(){
+ localStorage.setItem(STORAGE_KEY,JSON.stringify(tasks));
+}
+
+function openPage(page){
+ document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+ document.querySelectorAll("nav button").forEach(b=>b.classList.remove("active"));
+ document.getElementById(page).classList.add("active");
+ const button=document.querySelector('nav button[data-page="'+page+'"]');
+ if(button)button.classList.add("active");
+ render();
+}
+
+document.querySelectorAll("nav button").forEach(button=>{
+ button.addEventListener("click",()=>openPage(button.dataset.page));
+});
+
+function splitSentences(text){
+ return text.match(/[^.!?\n]+[.!?]?/g)||[];
+}
+
+const actionPatterns=[
+ /\b(please\s+)?(remember to|don't forget to|make sure to)\b/i,
+ /\b(please\s+)?(submit|send|complete|finish|prepare|write|read|study|revise|attend|visit|buy|pay|collect|deliver|book|schedule|check|review|update|renew|apply|register|email|message|contact|call|phone|meet|discuss|arrange|organise|organize|create|bring|return|clean|repair|fix|cancel|confirm|upload|download|print|sign|file|save)\b/i,
+ /\b(i need to|i have to|i must|i should|i will|i'll|i promised to|i plan to|i intend to)\b/i,
+ /\b(you need to|you have to|you must|you should|you will|you'll)\b/i,
+ /\b(can you|could you|would you|will you)\s+(please\s+)?(submit|send|complete|finish|prepare|write|read|study|revise|attend|visit|buy|pay|collect|deliver|book|schedule|check|review|update|renew|apply|register|email|message|contact|call|phone|meet|discuss|arrange|create|bring|return|clean|repair|fix|cancel|confirm|upload|print|sign)\b/i,
+ /\b(ke tshwanetse go|ke tshwanetse|nka|o tshwanetse go)\b/i
+];
+
+const uncertainPattern=/\b(might|maybe|may|perhaps|possibly|could|if possible|not sure|thinking about|considering|probably)\b/i;
+const negativePattern=/\b(don't|do not|doesn't|does not|never|not yet|no need to|stop|avoid|cancel the idea of)\b/i;
+
+function explain(sentence){
+ const reasons=[];
+ if(actionPatterns.some(p=>p.test(sentence)))reasons.push("Contains an action or instruction phrase.");
+ if(/\b(by|before|on|tomorrow|today|tonight|next week|next month|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(sentence))reasons.push("Contains a possible deadline or time reference.");
+ if(uncertainPattern.test(sentence))reasons.push("Contains uncertain language.");
+ return reasons.join(" ");
+}
+
+function analyse(){
+ const message=document.getElementById("message").value.trim();
+ const results=document.getElementById("results");
+ results.innerHTML="";
+ if(!message){results.textContent="Please enter a message first.";return}
+ const sentences=splitSentences(message);
+ let found=[];
+ sentences.forEach(sentence=>{
+  const clean=sentence.trim();
+  if(!clean)return;
+  if(negativePattern.test(clean))return;
+  if(actionPatterns.some(p=>p.test(clean))){
+   const uncertain=uncertainPattern.test(clean);
+   const duplicate=tasks.some(t=>(t.text||"").toLowerCase()===clean.toLowerCase());
+   found.push({text:clean,uncertain,duplicate,reason:explain(clean)});
+  }
+ });
+ if(!found.length){
+  results.innerHTML="<p>No clear action was identified. Try adding a specific instruction or task.</p>";
+  return;
+ }
+ found.forEach((item,index)=>{
+  const card=document.createElement("div");
+  card.className="task";
+  const status=item.duplicate?"Possible duplicate":item.uncertain?"Needs confirmation":"Possible task";
+  card.innerHTML="<strong>"+status+"</strong><p></p><p class='small'></p>";
+  card.querySelectorAll("p")[0].textContent=item.text;
+  card.querySelectorAll("p")[1].textContent=item.reason;
+  if(item.uncertain){
+   const warning=document.createElement("p");
+   warning.className="warning";
+   warning.textContent="This sentence sounds uncertain. Review it before saving.";
+   card.appendChild(warning);
+  }
+  if(item.duplicate){
+   const warning=document.createElement("p");
+   warning.className="warning";
+   warning.textContent="A very similar task already exists.";
+   card.appendChild(warning);
+  }
+  const button=document.createElement("button");
+  button.className="primary";
+  button.textContent=item.duplicate?"Save anyway":"Confirm and save";
+  button.onclick=()=>{
+   tasks.push({
+    id:Date.now()+index,
+    text:item.text,
+    completed:false,
+    uncertain:item.uncertain,
+    date:"",
+    time:"",
+    reason:item.reason,
+    source:item.text
+   });
+   saveTasks();
+   button.textContent="Saved";
+   button.disabled=true;
+   render();
+  };
+  card.appendChild(button);
+  results.appendChild(card);
+ });
+}
+
+function render(){
+ const completed=tasks.filter(t=>t.completed).length;
+ document.getElementById("stats").innerHTML=
+ '<div class="stat"><strong>'+tasks.length+'</strong><br><span class="small">Total</span></div>'+
+ '<div class="stat"><strong>'+completed+'</strong><br><span class="small">Completed</span></div>'+
+ '<div class="stat"><strong>'+(tasks.length-completed)+'</strong><br><span class="small">Pending</span></div>'+
+ '<div class="stat"><strong>'+tasks.filter(t=>t.uncertain).length+'</strong><br><span class="small">Uncertain</span></div>';
+
+ const list=document.getElementById("taskList");
+ list.innerHTML="";
+ if(!tasks.length){list.textContent="No saved tasks yet.";return}
+ tasks.forEach(task=>{
+  const card=document.createElement("div");
+  card.className="task"+(task.completed?" done":"");
+  const title=document.createElement("p");
+  title.textContent=task.text||"Untitled task";
+  card.appendChild(title);
+  if(task.uncertain){
+   const warning=document.createElement("p");
+   warning.className="warning";
+   warning.textContent="Needs review";
+   card.appendChild(warning);
+  }
+  const check=document.createElement("input");
+  check.type="checkbox";
+  check.checked=!!task.completed;
+  check.style.width="auto";
+  check.addEventListener("change",()=>{
+   task.completed=check.checked;saveTasks();render();
+  });
+  const label=document.createElement("label");
+  label.appendChild(check);
+  label.append(" Completed");
+  card.appendChild(label);
+  const remove=document.createElement("button");
+  remove.textContent="Delete";
+  remove.style.marginLeft="12px";
+  remove.onclick=()=>{
+   tasks=tasks.filter(t=>t.id!==task.id);saveTasks();render();
+  };
+  card.appendChild(remove);
+  list.appendChild(card);
+ });
+ const insights=document.getElementById("insightList");
+ insights.innerHTML="";
+ tasks.forEach(task=>{
+  const p=document.createElement("p");
+  p.textContent=(task.text||"Task")+": "+(task.reason||"Saved task.") ;
+  insights.appendChild(p);
+ });
+}
+
+function clearCompleted(){
+ tasks=tasks.filter(t=>!t.completed);
+ saveTasks();render();
+}
+
+function saveSettings(){
+ localStorage.setItem("clearcue_language",document.getElementById("language").value);
+ document.getElementById("settingsMessage").textContent="Settings saved.";
+}
+
+function loadSettings(){
+ document.getElementById("language").value=localStorage.getItem("clearcue_language")||"English";
+}
+
+loadTasks();
+loadSettings();
+render();
+</script>
+</body>
+</html>
+  
