@@ -1,0 +1,385 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101827">
+<title>ClearCue AI — Version 0.7</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0b1220;color:#f3f6fb;font:15px/1.5 system-ui,sans-serif}
+main{max-width:520px;margin:auto;padding:20px 16px 100px}
+header{display:flex;justify-content:space-between;align-items:center}
+.logo{background:#8ce0c0;color:#10221e;padding:9px 13px;border-radius:12px;font-weight:bold}
+.tag,.pill{color:#8ce0c0;border:1px solid #477d70;border-radius:20px;padding:5px 9px;font-size:11px}
+h1{font-size:30px;line-height:1.2;margin:28px 0 5px}
+h2{font-size:19px}
+p,.muted{color:#9cabc0}
+.card{background:#152238;border:1px solid #2b3b52;border-radius:17px;padding:16px;margin:14px 0}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:18px 0}
+.stat{background:#20344a;border-radius:14px;padding:15px}
+.stat strong{display:block;font-size:27px;color:#8ce0c0}
+.stat span{font-size:12px;color:#c0cede}
+button,select,textarea,input{font:inherit}
+button{border:0;border-radius:11px;padding:11px;background:#8ce0c0;color:#10221e;font-weight:bold;cursor:pointer}
+.primary{width:100%;margin-top:10px}
+.secondary{background:#293b53;color:white}
+textarea,input[type=text]{width:100%;padding:12px;border-radius:11px;border:1px solid #35465d;background:#0d1726;color:white}
+textarea{min-height:95px}
+select{background:#0d1726;color:white;border:1px solid #35465d;border-radius:10px;padding:10px}
+.task{padding:13px 0;border-bottom:1px solid #35465d}
+.task:last-child{border:0}
+.taskrow{display:flex;gap:9px;align-items:flex-start}
+.taskrow input{margin-top:5px;width:19px;height:19px}
+.taskbody{flex:1;min-width:0;overflow-wrap:anywhere}
+.done{text-decoration:line-through;opacity:.55}
+.small{font-size:12px;color:#9cabc0}
+.delete{background:#49303a;color:#ffd4d4;padding:7px 9px;font-size:11px}
+.status{font-size:10px;padding:3px 7px;border-radius:8px;background:#203c39;color:#a6e9d3}
+.nav{position:fixed;bottom:0;left:0;right:0;background:#101b2c;border-top:1px solid #304158;display:flex;justify-content:center;gap:4px;padding:9px 5px;z-index:5}
+.nav button{flex:1;max-width:125px;background:transparent;color:#aebbd0;font-size:11px;padding:9px 3px}
+.nav button.active{background:#203b3a;color:#9ce8cc}
+.view{display:none}
+.view.active{display:block}
+.notice{background:#202e43;border-radius:11px;padding:12px;font-size:12px;color:#c6d2e2}
+.bar{height:10px;background:#293b53;border-radius:20px;overflow:hidden}
+.bar div{height:100%;background:#8ce0c0;width:0}
+footer{text-align:center;color:#8291a5;font-size:11px;margin-top:25px}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div class="logo">C · ClearCue AI</div>
+<span class="tag">VERSION 0.7</span>
+</header>
+
+<!-- DASHBOARD -->
+<section class="view active" id="dashboard">
+<h1>Welcome to ClearCue.</h1>
+<p>Your day, made clearer.</p>
+
+<div class="stats">
+<div class="stat"><strong id="total">0</strong><span>Total tasks</span></div>
+<div class="stat"><strong id="completed">0</strong><span>Completed</span></div>
+<div class="stat"><strong id="pending">0</strong><span>Pending</span></div>
+<div class="stat"><strong id="uncertain">0</strong><span>Needs confirmation</span></div>
+</div>
+
+<div class="card">
+<h2>Your progress</h2>
+<div class="bar"><div id="progressBar"></div></div>
+<p id="progressText" class="small">0% of tasks completed</p>
+</div>
+
+<div class="card">
+<h2>Quick capture</h2>
+<textarea id="quickMessage" placeholder="What do you need to get done?"></textarea>
+<button class="primary" onclick="captureQuick()">Add to my tasks</button>
+</div>
+
+<div class="card">
+<h2>Upcoming deadlines</h2>
+<div id="upcomingPreview"></div>
+</div>
+</section>
+
+<!-- TASKS -->
+<section class="view" id="tasks">
+<h1>My tasks</h1>
+<p>Everything you need to get done.</p>
+<div class="card">
+<div id="taskList"></div>
+<p id="taskEmpty" class="muted">No tasks saved yet.</p>
+</div>
+</section>
+
+<!-- DEADLINES -->
+<section class="view" id="deadlines">
+<h1>Upcoming deadlines</h1>
+<p>Tasks with a detected date or time phrase.</p>
+<div class="card">
+<div id="deadlineList"></div>
+<p id="deadlineEmpty" class="muted">No deadlines detected yet.</p>
+</div>
+<p class="notice">Dates are displayed as detected in the original message. This prototype does not calculate exact calendar reminders.</p>
+</section>
+
+<!-- PROGRESS -->
+<section class="view" id="progress">
+<h1>My progress</h1>
+<p>See how you're moving forward.</p>
+<div class="card">
+<h2>Completion rate</h2>
+<strong id="rate" style="font-size:35px;color:#8ce0c0">0%</strong>
+<div class="bar"><div id="progressBar2"></div></div>
+<p id="progressDetail" class="small">No tasks recorded yet.</p>
+</div>
+<div class="card">
+<h2>Keep going!</h2>
+<p id="encouragement">Every completed task is progress.</p>
+</div>
+</section>
+
+<!-- SETTINGS -->
+<section class="view" id="settings">
+<h1>Settings</h1>
+<p>Personalise your workspace.</p>
+<div class="card">
+<h2>Preferred language</h2>
+<select id="language" onchange="changeLanguage()">
+<option value="English">English</option>
+<option value="Setswana">Setswana</option>
+</select>
+<p class="small">This changes your saved preference. Full translation is not yet available.</p>
+</div>
+<div class="card">
+<h2>About ClearCue</h2>
+<p>Less confusion. More things done.</p>
+<p class="small">Version 0.7 · Early rule-based prototype</p>
+</div>
+<div class="card">
+<h2>Manage your data</h2>
+<button class="secondary" onclick="clearCompleted()">Clear completed tasks</button>
+<button class="secondary" style="margin-top:10px" onclick="clearAll()">Delete all tasks</button>
+</div>
+<p class="notice">Your tasks are stored in this browser on this device. They are not synced to other devices or backed up online.</p>
+</section>
+
+<footer>CLEARCUE AI · VERSION 0.7<br>Early prototype · Review all task suggestions</footer>
+</main>
+
+<nav class="nav">
+<button class="active" data-view="dashboard" onclick="showView('dashboard',this)">⌂<br>Home</button>
+<button data-view="tasks" onclick="showView('tasks',this)">☷<br>Tasks</button>
+<button data-view="deadlines" onclick="showView('deadlines',this)">◷<br>Deadlines</button>
+<button data-view="progress" onclick="showView('progress',this)">▥<br>Progress</button>
+<button data-view="settings" onclick="showView('settings',this)">⚙<br>Settings</button>
+</nav>
+
+<script>
+const KEY = "clearcue_tasks_v07";
+let tasks = [];
+
+try {
+  const current = localStorage.getItem(KEY);
+  const older = localStorage.getItem("clearcue_tasks_v06");
+  const previous = localStorage.getItem("clearcue_tasks_v05");
+  const data = current || older || previous || "[]";
+  const parsed = JSON.parse(data);
+  if (Array.isArray(parsed)) {
+    tasks = parsed.map(t => ({
+      ...t,
+      id: String(t.id || Date.now() + Math.random()),
+      title: String(t.title || ""),
+      source: String(t.source || t.title || ""),
+      deadline: String(t.deadline || t.date || "No clear deadline detected"),
+      language: String(t.language || "English"),
+      uncertain: Boolean(t.uncertain),
+      done: Boolean(t.done)
+    }));
+  }
+} catch {
+  tasks = [];
+}
+
+function escapeHTML(value) {
+  return String(value).replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",
+    '"':"&quot;","'":"&#39;"
+  })[c]);
+}
+
+function save() {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(tasks));
+    render();
+  } catch {
+    alert("Unable to save tasks in this browser.");
+  }
+}
+
+function showView(name, button) {
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  document.getElementById(name).classList.add("active");
+  document.querySelectorAll(".nav button").forEach(b => b.classList.remove("active"));
+  button.classList.add("active");
+  render();
+}
+
+const englishVerbs = [
+"pay","call","send","submit","buy","collect","book","meet",
+"visit","finish","complete","prepare","bring","renew","check",
+"reply","contact","attend","read","write","arrange","register",
+"confirm","deliver","apply","return","print","sign","review",
+"discuss","cancel","order","organise","organize","schedule"
+];
+
+const setswanaVerbs = [
+"duela","letsa","romela","isa","tlisa","reka","kopana",
+"kwadisa","netefatsa","rulaganya","baakanya","tsenya",
+"ntsha","bala","kwala","tlhatlhoba","bitsa","busetsa"
+];
+
+function hasWord(sentence,word) {
+  return new RegExp("(^|[^\\p{L}])"+word+"([^\\p{L}]|$)","iu").test(sentence);
+}
+
+function analyse(sentence) {
+  const tn = setswanaVerbs.find(v => hasWord(sentence,v));
+  const en = englishVerbs.find(v => hasWord(sentence,v));
+  const language = tn ? "Setswana" : "English";
+  const verb = tn || en;
+  if (!verb) return null;
+
+  const negative = language === "English"
+    ? /\b(don't|do not|doesn't|does not|never|mustn't|must not|shouldn't|should not|avoid)\b/i.test(sentence)
+    : /\b(se ka|ga ke|ga a|ga ba|ga re)\b/i.test(sentence);
+
+  const uncertain = language === "English"
+    ? /\b(might|may|maybe|could|possibly|perhaps|if|probably|not sure)\b/i.test(sentence)
+    : /\b(gongwe|nka|go ka nna)\b/i.test(sentence);
+
+  const datePattern = language === "English"
+    ? /\b(today|tomorrow|tonight|next week|next month|this week|this month|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+|\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\b/i
+    : /\b(gompieno|kamoso|mantaga|labobedi|laboraro|labone|labotlhano|matlhatso)\b/i;
+
+  const date = sentence.match(datePattern);
+  return {language,negative,uncertain,deadline:date ? date[0] : "No clear deadline detected"};
+}
+
+function addMessage(message) {
+  const sentences = message.replace(/\n+/g,". ")
+    .split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean);
+
+  let added = 0;
+  let ignored = 0;
+
+  sentences.forEach(sentence => {
+    const result = analyse(sentence);
+    if (!result) return;
+    if (result.negative) {ignored++;return;}
+
+    if (tasks.some(t => t.source.toLowerCase() === sentence.toLowerCase())) return;
+
+    tasks.unshift({
+      id: Date.now().toString()+Math.random().toString(16).slice(2),
+      title: sentence.replace(/[.!?]+$/,""),
+      source: sentence,
+      deadline: result.deadline,
+      language: result.language,
+      uncertain: result.uncertain,
+      done: false
+    });
+    added++;
+  });
+
+  save();
+  return {added,ignored};
+}
+
+function captureQuick() {
+  const input = document.getElementById("quickMessage");
+  if (!input.value.trim()) {
+    alert("Enter a message first.");
+    return;
+  }
+  const result = addMessage(input.value.trim());
+  input.value = "";
+  alert(result.added + " task(s) added. " + result.ignored + " negative instruction(s) ignored. Please review the suggestions.");
+}
+
+function toggleTask(id) {
+  const task = tasks.find(t => t.id === id);
+  if (task) {
+    task.done = !task.done;
+    save();
+  }
+}
+
+function deleteTask(id) {
+  tasks = tasks.filter(t => t.id !== id);
+  save();
+}
+
+function clearCompleted() {
+  tasks = tasks.filter(t => !t.done);
+  save();
+}
+
+function clearAll() {
+  if (!confirm("Delete all saved tasks? This cannot be undone.")) return;
+  tasks = [];
+  save();
+}
+
+function renderTask(t) {
+  return `
+    <div class="task">
+      <div class="taskrow">
+        <input type="checkbox" ${t.done ? "checked" : ""}
+          aria-label="Complete task" onchange="toggleTask('${t.id}')">
+        <div class="taskbody ${t.done ? "done" : ""}">
+          <strong>${escapeHTML(t.title)}</strong><br>
+          <span class="status">${t.uncertain ? "Needs confirmation" : "Possible action"}</span>
+          <div class="small">${escapeHTML(t.deadline)}</div>
+          <div class="small">${escapeHTML(t.language)}</div>
+        </div>
+        <button class="delete" onclick="deleteTask('${t.id}')">Delete</button>
+      </div>
+    </div>`;
+}
+
+function render() {
+  const total = tasks.length;
+  const completed = tasks.filter(t => t.done).length;
+  const pending = total - completed;
+  const uncertain = tasks.filter(t => t.uncertain && !t.done).length;
+  const rate = total ? Math.round(completed / total * 100) : 0;
+
+  document.getElementById("total").textContent = total;
+  document.getElementById("completed").textContent = completed;
+  document.getElementById("pending").textContent = pending;
+  document.getElementById("uncertain").textContent = uncertain;
+  document.getElementById("progressBar").style.width = rate + "%";
+  document.getElementById("progressBar2").style.width = rate + "%";
+  document.getElementById("progressText").textContent = rate + "% of tasks completed";
+  document.getElementById("rate").textContent = rate + "%";
+  document.getElementById("progressDetail").textContent =
+    completed + " completed out of " + total + " total tasks.";
+  document.getElementById("encouragement").textContent =
+    total === 0 ? "Add your first task to begin tracking progress."
+    : rate === 100 ? "You've completed every saved task. Well done!"
+    : "Keep going. Every completed task is progress.";
+
+  document.getElementById("taskList").innerHTML = tasks.map(renderTask).join("");
+  document.getElementById("taskEmpty").hidden = total > 0;
+
+  const upcoming = tasks.filter(t =>
+    !t.done && t.deadline !== "No clear deadline detected"
+  );
+
+  document.getElementById("upcomingPreview").innerHTML =
+    upcoming.length ? upcoming.slice(0,3).map(t =>
+      `<div class="task"><strong>${escapeHTML(t.title)}</strong><div class="small">${escapeHTML(t.deadline)}</div></div>`
+    ).join("") : '<p class="muted">No detected deadlines yet.</p>';
+
+  document.getElementById("deadlineList").innerHTML =
+    upcoming.map(renderTask).join("");
+  document.getElementById("deadlineEmpty").hidden = upcoming.length > 0;
+}
+
+function changeLanguage() {
+  localStorage.setItem("clearcue_language_v07",
+    document.getElementById("language").value);
+}
+
+document.getElementById("language").value =
+  localStorage.getItem("clearcue_language_v07") || "English";
+
+render();
+</script>
+</body>
+  </html>
+  
