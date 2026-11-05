@@ -1,0 +1,349 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClearCue AI V0.15</title>
+<style>
+:root{--bg:#101827;--panel:#1b2940;--text:#f4f7fb;--muted:#aab8cc;--accent:#65d6bd;--line:#34445d}
+*{box-sizing:border-box}
+body{margin:0;padding:15px;background:var(--bg);color:var(--text);font-family:Arial,sans-serif}
+header{text-align:center;padding:18px 0}
+h1{color:var(--accent);margin:0}
+header p,.muted{color:var(--muted)}
+main{max-width:850px;margin:auto}
+.panel{background:var(--panel);padding:17px;border-radius:13px;margin:14px 0}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:var(--bg);padding:13px;border-radius:9px;text-align:center}
+.stat strong{display:block;font-size:23px;color:var(--accent)}
+.stat span{font-size:12px;color:var(--muted)}
+textarea,input,select{width:100%;padding:12px;margin:6px 0 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:white;font-size:15px}
+textarea{min-height:90px}
+button{border:0;border-radius:8px;padding:11px 14px;margin:3px;background:var(--accent);color:#10221f;font-weight:bold;cursor:pointer}
+.secondary{background:#34445d;color:white}
+.danger{background:#a34455;color:white}
+.task{background:var(--bg);padding:13px;border:1px solid var(--line);border-radius:10px;margin:10px 0}
+.task.done{opacity:.6}
+.task.done .task-title{text-decoration:line-through}
+.task-title{font-weight:bold;overflow-wrap:anywhere}
+.meta{font-size:12px;color:var(--muted);margin:7px 0}
+.tag{display:inline-block;background:#34445d;padding:4px 8px;border-radius:15px;font-size:11px;margin:3px}
+.actions{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.small{font-size:12px;padding:7px 10px}
+.progress{height:9px;background:#34445d;border-radius:10px;overflow:hidden}
+.progress div{height:100%;background:var(--accent)}
+.notice{padding:12px;border:1px solid var(--line);border-radius:9px;background:var(--bg);line-height:1.5}
+footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
+</style>
+</head>
+<body>
+<header>
+<h1>ClearCue AI</h1>
+<p>Less confusion. More things done.</p>
+<span class="tag">Version 0.15 — Security and Privacy</span>
+</header>
+
+<main>
+<section class="panel">
+<h2>Dashboard</h2>
+<div class="stats">
+<div class="stat"><strong id="total">0</strong><span>Total tasks</span></div>
+<div class="stat"><strong id="pending">0</strong><span>Pending</span></div>
+<div class="stat"><strong id="completed">0</strong><span>Completed</span></div>
+</div>
+<p class="meta">Overall progress</p>
+<div class="progress"><div id="progressBar" style="width:0%"></div></div>
+<p id="progressText" class="meta">0% completed</p>
+</section>
+
+<section class="panel">
+<h2>Quick Capture</h2>
+<p class="muted">Enter an instruction in English or Setswana.</p>
+<textarea id="capture" maxlength="5000" placeholder="Example: Submit my assignment by Friday."></textarea>
+<button onclick="analyse()">Find tasks</button>
+<div id="suggestions"></div>
+</section>
+
+<section class="panel">
+<h2>My Tasks</h2>
+<input id="search" maxlength="200" placeholder="Search tasks..." oninput="render()">
+<select id="filter" onchange="render()">
+<option value="All">All tasks</option>
+<option value="Pending">Pending</option>
+<option value="Completed">Completed</option>
+<option value="Uncertain">Needs review</option>
+</select>
+<div id="taskList"></div>
+</section>
+
+<section class="panel">
+<h2>Backup and Restore</h2>
+<p class="muted">Download a copy of your tasks or restore a backup previously exported from ClearCue V0.15.</p>
+<button onclick="exportBackup()">Export backup</button>
+<label for="backupFile" class="muted">Choose a ClearCue backup file:</label>
+<input type="file" id="backupFile" accept=".json,application/json">
+<button onclick="importBackup()">Restore backup</button>
+<p id="backupStatus" class="meta"></p>
+</section>
+
+<section class="panel">
+<h2>Privacy and Data</h2>
+<div class="notice">
+<strong>How this prototype handles your information</strong>
+<p class="muted">Tasks are stored in your browser's local storage. This prototype does not send task content to a ClearCue server.</p>
+<p class="muted">Anyone with access to this browser profile or device may be able to access locally stored tasks. Local storage is not encrypted.</p>
+<p class="muted">Avoid entering passwords, banking information, identity numbers or other highly sensitive information.</p>
+<p class="muted">Exported backup files contain your task information. Keep them somewhere private.</p>
+</div>
+<h3>Data controls</h3>
+<button class="secondary" onclick="exportBackup()">Download my data</button>
+<button class="danger" onclick="deleteAll()">Delete all tasks</button>
+<p class="meta">Deleting tasks from this page does not erase exported backup files or copies stored elsewhere.</p>
+</section>
+
+<section class="panel">
+<h2>Final Testing Checklist</h2>
+<div id="testChecklist">
+<p><label><input type="checkbox" class="test"> Tasks can be created and saved</label></p>
+<p><label><input type="checkbox" class="test"> Tasks can be edited and completed</label></p>
+<p><label><input type="checkbox" class="test"> Search and filters work</label></p>
+<p><label><input type="checkbox" class="test"> Backup can be downloaded</label></p>
+<p><label><input type="checkbox" class="test"> Backup can be restored</label></p>
+<p><label><input type="checkbox" class="test"> Data deletion works</label></p>
+</div>
+<p id="testProgress" class="meta">0 of 6 checks completed</p>
+</section>
+</main>
+
+<footer>ClearCue AI V0.15 · Privacy-conscious prototype</footer>
+
+<script>
+const KEY="clearcue_tasks_v015";
+let tasks=[];
+
+function validTask(t){
+ return t&&typeof t==="object"&&typeof t.text==="string"&&t.text.trim().length>0;
+}
+
+try{
+ let saved=localStorage.getItem(KEY);
+ if(!saved){
+  for(const oldKey of ["clearcue_tasks_v014","clearcue_tasks_v013","clearcue_tasks_v012"]){
+   const old=localStorage.getItem(oldKey);
+   if(old){saved=old;break;}
+  }
+ }
+ if(saved){
+  const parsed=JSON.parse(saved);
+  if(Array.isArray(parsed)){
+   tasks=parsed.filter(validTask).map(t=>({
+    id:String(t.id||Date.now()+Math.random()),
+    text:t.text.trim().slice(0,5000),
+    category:t.category||"Other",
+    deadline:t.deadline||"",
+    date:t.date||"",
+    time:t.time||"",
+    language:t.language||"English",
+    uncertain:!!t.uncertain,
+    completed:!!t.completed,
+    created:t.created||Date.now()
+   }));
+  }
+ }
+}catch(e){tasks=[];}
+
+function save(){
+ try{
+  localStorage.setItem(KEY,JSON.stringify(tasks));
+  render();
+ }catch(e){
+  alert("Unable to save. Your browser storage may be full.");
+ }
+}
+
+function analyse(){
+ const input=document.getElementById("capture").value.trim();
+ const area=document.getElementById("suggestions");
+ area.innerHTML="";
+ if(!input){area.textContent="Enter a message first.";return;}
+ const sentences=input.split(/[\n.!?]+/).map(s=>s.trim()).filter(Boolean);
+ const action=/\b(submit|send|pay|call|attend|complete|finish|collect|prepare|buy|book|visit|study|revise|write|apply|register|renew|remember to|don't forget to)\b/i;
+ const setswana=/\b(ke tshwanetse go|re tshwanetse go|o tshwanetse go|ba tshwanetse go|gakologelwa go|duela|romela|ithuta|kwala|fetsa)\b/i;
+ const negative=/\b(don't|do not|doesn't|never|not yet|can't|cannot)\b/i;
+ const uncertain=/\b(might|maybe|may|possibly|could|perhaps)\b/i;
+ const found=sentences.filter(s=>(action.test(s)||setswana.test(s))&&!negative.test(s));
+ if(!found.length){area.textContent="No clear tasks detected.";return;}
+ found.forEach(s=>{
+  const card=document.createElement("div");
+  card.className="task";
+  const title=document.createElement("p");
+  title.textContent=s;
+  const info=document.createElement("p");
+  info.className="meta";
+  info.textContent=uncertain.test(s)?"Suggested task — needs review":"Suggested task — please confirm";
+  const add=document.createElement("button");
+  add.textContent="Save task";
+  add.onclick=()=>{
+   tasks.push({
+    id:String(Date.now()+Math.random()),
+    text:s,
+    category:"Other",
+    deadline:"",
+    date:"",
+    time:"",
+    language:setswana.test(s)?"Setswana":"English",
+    uncertain:uncertain.test(s),
+    completed:false,
+    created:Date.now()
+   });
+   save();
+   add.textContent="Saved";
+   add.disabled=true;
+  };
+  card.append(title,info,add);
+  area.appendChild(card);
+ });
+}
+
+function editTask(id){
+ const t=tasks.find(x=>x.id===id);
+ if(!t)return;
+ const text=prompt("Edit task description:",t.text);
+ if(text===null)return;
+ if(!text.trim()||text.trim().length>5000){
+  alert("Please enter a description between 1 and 5000 characters.");
+  return;
+ }
+ t.text=text.trim();
+ save();
+}
+
+function toggleTask(id){
+ const t=tasks.find(x=>x.id===id);
+ if(t){t.completed=!t.completed;save();}
+}
+function deleteTask(id){
+ if(!confirm("Delete this task?"))return;
+ tasks=tasks.filter(t=>t.id!==id);save();
+}
+function deleteAll(){
+ if(!confirm("Delete every task saved in this V0.15 app? This cannot be undone unless you have a backup."))return;
+ tasks=[];
+ save();
+}
+
+function exportBackup(){
+ const data={
+  app:"ClearCue AI",
+  version:"0.15",
+  exportedAt:new Date().toISOString(),
+  tasks:tasks
+ };
+ const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+ const url=URL.createObjectURL(blob);
+ const a=document.createElement("a");
+ a.href=url;
+ a.download="clearcue-backup-v015.json";
+ a.click();
+ URL.revokeObjectURL(url);
+ document.getElementById("backupStatus").textContent="Backup download requested.";
+}
+
+function importBackup(){
+ const file=document.getElementById("backupFile").files[0];
+ const status=document.getElementById("backupStatus");
+ if(!file){status.textContent="Choose a backup file first.";return;}
+ if(file.size>2*1024*1024){status.textContent="File is too large. Maximum size is 2 MB.";return;}
+ const reader=new FileReader();
+ reader.onload=()=>{
+  try{
+   const data=JSON.parse(reader.result);
+   if(data.app!=="ClearCue AI"||!Array.isArray(data.tasks)){
+    throw new Error("Not a recognised ClearCue backup.");
+   }
+   if(!data.tasks.every(validTask)){
+    throw new Error("The backup contains invalid task entries.");
+   }
+   if(!confirm("Restore "+data.tasks.length+" tasks? This replaces your current V0.15 task list."))return;
+   tasks=data.tasks.map(t=>({
+    id:String(t.id||Date.now()+Math.random()),
+    text:t.text.trim().slice(0,5000),
+    category:["Education","Work","Personal","Finance","Health","Other"].includes(t.category)?t.category:"Other",
+    deadline:typeof t.deadline==="string"?t.deadline:"",
+    date:typeof t.date==="string"?t.date:"",
+    time:typeof t.time==="string"?t.time:"",
+    language:typeof t.language==="string"?t.language:"English",
+    uncertain:!!t.uncertain,
+    completed:!!t.completed,
+    created:Number(t.created)||Date.now()
+   }));
+   save();
+   status.textContent="Backup restored successfully.";
+  }catch(e){status.textContent="Could not restore backup: "+e.message;}
+ };
+ reader.readAsText(file);
+}
+
+function render(){
+ const list=document.getElementById("taskList");
+ list.innerHTML="";
+ const query=document.getElementById("search").value.toLowerCase();
+ const filter=document.getElementById("filter").value;
+ const visible=tasks.filter(t=>
+  t.text.toLowerCase().includes(query)&&
+  (filter==="All"||(filter==="Pending"&&!t.completed)||(filter==="Completed"&&t.completed)||(filter==="Uncertain"&&t.uncertain))
+ );
+ if(!visible.length)list.textContent="No matching tasks.";
+ visible.forEach(t=>{
+  const card=document.createElement("div");
+  card.className="task"+(t.completed?" done":"");
+  const title=document.createElement("div");
+  title.className="task-title";
+  title.textContent=t.text;
+  const meta=document.createElement("p");
+  meta.className="meta";
+  meta.textContent=(t.category||"Other")+" · "+(t.language||"English");
+  const status=document.createElement("span");
+  status.className="tag";
+  status.textContent=t.completed?"Completed":t.uncertain?"Needs review":"Pending";
+  const actions=document.createElement("div");
+  actions.className="actions";
+  const done=document.createElement("button");
+  done.className="small";
+  done.textContent=t.completed?"Mark pending":"Complete";
+  done.onclick=()=>toggleTask(t.id);
+  const edit=document.createElement("button");
+  edit.className="small secondary";
+  edit.textContent="Edit";
+  edit.onclick=()=>editTask(t.id);
+  const del=document.createElement("button");
+  del.className="small danger";
+  del.textContent="Delete";
+  del.onclick=()=>deleteTask(t.id);
+  actions.append(done,edit,del);
+  card.append(title,meta,status,actions);
+  list.appendChild(card);
+ });
+ const total=tasks.length;
+ const completed=tasks.filter(t=>t.completed).length;
+ document.getElementById("total").textContent=total;
+ document.getElementById("pending").textContent=total-completed;
+ document.getElementById("completed").textContent=completed;
+ const percent=total?Math.round(completed/total*100):0;
+ document.getElementById("progressBar").style.width=percent+"%";
+ document.getElementById("progressText").textContent=percent+"% completed";
+}
+
+document.querySelectorAll(".test").forEach(box=>{
+ box.addEventListener("change",()=>{
+  const count=[...document.querySelectorAll(".test")].filter(x=>x.checked).length;
+  document.getElementById("testProgress").textContent=count+" of 6 checks completed";
+ });
+});
+
+render();
+</script>
+</body>
+  </html>
+  
