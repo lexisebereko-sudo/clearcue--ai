@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ClearCue AI V1.2 Simulator</title>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 20px;
+  background: #101827;
+  color: white;
+  font-family: Arial, sans-serif;
+}
+
+.container {
+  max-width: 650px;
+  margin: auto;
+}
+
+textarea {
+  width: 100%;
+  min-height: 130px;
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid #40516b;
+  background: #202d40;
+  color: white;
+  font-size: 16px;
+}
+
+button {
+  padding: 13px 18px;
+  margin-top: 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #38bdf8;
+  color: #071321;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.panel {
+  margin-top: 20px;
+  padding: 16px;
+  border-radius: 10px;
+  background: #202d40;
+}
+
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.success { color: #4ade80; }
+.error { color: #f87171; }
+
+small { color: #aebbd0; }
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<h1>ClearCue AI</h1>
+<h2>V1.2 Response Simulator</h2>
+
+<p>
+Enter a message to simulate task extraction.
+</p>
+
+<textarea id="message"
+placeholder="Example: Please submit my university application by Friday."></textarea>
+
+<br>
+
+<button id="analyse">Analyse message</button>
+
+<div class="panel">
+<h3>Simulated AI response</h3>
+<pre id="response">Waiting for input...</pre>
+</div>
+
+<div class="panel">
+<h3>Validator result</h3>
+<p id="status">Waiting for analysis...</p>
+<pre id="errors"></pre>
+</div>
+
+</div>
+
+<script type="module">
+
+import { validateAIResponse }
+from "./validator-v12.js";
+
+function simulateAI(message) {
+
+  const sentence = message
+    .split(/[.!?]+/)
+    .map(s => s.trim())
+    .find(s =>
+      /\b(submit|send|pay|collect|complete|finish|call|duela|romela)\b/i.test(s)
+    );
+
+  if (!sentence) return null;
+
+  const task = sentence
+    .replace(/^(please|remember to|remember|kindly)\s+/i, "")
+    .replace(/\s+by\s+.+$/i, "")
+    .replace(/\s+today$/i, "")
+    .trim();
+
+  const uncertain =
+    /\b(might|may|maybe|could)\b/i.test(sentence);
+
+  let deadline = null;
+
+  if (/\btoday\b/i.test(sentence)) deadline = "Today";
+  else if (/\btomorrow\b/i.test(sentence)) deadline = "Tomorrow";
+  else if (/\bfriday\b/i.test(sentence)) deadline = "Friday";
+  else if (/\bnext week\b/i.test(sentence)) deadline = "Next week";
+
+  let category = "Other";
+
+  if (/application|school|university|study|exam/i.test(sentence))
+    category = "Education";
+  else if (/bill|pay|money/i.test(sentence))
+    category = "Finance";
+  else if (/work|office|report/i.test(sentence))
+    category = "Work";
+
+  const priority = deadline === "Today"
+    ? "High"
+    : deadline ? "Medium" : "Low";
+
+  return {
+    task,
+    source: sentence,
+    deadline,
+    priority,
+    category,
+    uncertain,
+    explanation: uncertain
+      ? "The message contains uncertain wording."
+      : "A possible action was identified in the message."
+  };
+}
+
+document.getElementById("analyse").onclick = () => {
+
+  const message =
+    document.getElementById("message").value.trim();
+
+  const responseBox =
+    document.getElementById("response");
+
+  const status =
+    document.getElementById("status");
+
+  const errors =
+    document.getElementById("errors");
+
+  if (!message) {
+    status.textContent = "Please enter a message.";
+    responseBox.textContent = "No response generated.";
+    errors.textContent = "";
+    return;
+  }
+
+  const result = simulateAI(message);
+
+  if (!result) {
+    responseBox.textContent = "No task detected.";
+    status.textContent = "No response to validate.";
+    errors.textContent = "";
+    return;
+  }
+
+  responseBox.textContent =
+    JSON.stringify(result, null, 2);
+
+  const validation =
+    validateAIResponse(result, message);
+
+  if (validation.valid) {
+    status.innerHTML =
+      '<span class="success">VALID RESPONSE — PASSED</span>';
+
+    errors.textContent =
+      "The response passed all seven validation checks.";
+  } else {
+    status.innerHTML =
+      '<span class="error">INVALID RESPONSE — REJECTED</span>';
+
+    errors.textContent =
+      validation.errors.join("\n");
+  }
+};
+
+</script>
+</body>
+</html>
