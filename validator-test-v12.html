@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ClearCue V1.2 Validator Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 24px;
+      background: #101827;
+      color: white;
+    }
+    button {
+      padding: 12px 18px;
+      margin: 8px 0;
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    pre {
+      white-space: pre-wrap;
+      background: #202d40;
+      padding: 16px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>ClearCue AI V1.2</h1>
+  <h2>Validator test</h2>
+
+  <button id="run">Run validator tests</button>
+  <pre id="results">Waiting for tests...</pre>
+
+  <script type="module">
+    import { validateAIResponse }
+      from "./validator-v12.js";
+
+    const originalMessage =
+      "Please submit my university application by Friday.";
+
+    const validResponse = {
+      task: "Submit university application",
+      source: originalMessage,
+      deadline: "Friday",
+      priority: "High",
+      category: "Education",
+      uncertain: false,
+      explanation: "A direct instruction with a Friday deadline."
+    };
+
+    document.getElementById("run").onclick = () => {
+      const results = [];
+
+      const test1 = validateAIResponse(
+        validResponse,
+        originalMessage
+      );
+
+      results.push(
+        "TEST 1 - Valid response: " +
+        (test1.valid ? "PASS" : "FAIL")
+      );
+
+      const invalidResponse = {
+        ...validResponse,
+        priority: "Extreme"
+      };
+
+      const test2 = validateAIResponse(
+        invalidResponse,
+        originalMessage
+      );
+
+      results.push(
+        "TEST 2 - Invalid priority rejected: " +
+        (!test2.valid ? "PASS" : "FAIL")
+      );
+
+      const wrongSource = {
+        ...validResponse,
+        source: "Pay the electricity bill."
+      };
+
+      const test3 = validateAIResponse(
+        wrongSource,
+        originalMessage
+      );
+
+      results.push(
+        "TEST 3 - Incorrect source rejected: " +
+        (!test3.valid ? "PASS" : "FAIL")
+      );
+
+      const missingTask = {
+        ...validResponse,
+        task: ""
+      };
+
+      const test4 = validateAIResponse(
+        missingTask,
+        originalMessage
+      );
+
+      results.push(
+        "TEST 4 - Missing task rejected: " +
+        (!test4.valid ? "PASS" : "FAIL")
+      );
+
+      document.getElementById("results").textContent =
+        results.join("\n");
+    };
+  </script>
+</body>
+</html>
