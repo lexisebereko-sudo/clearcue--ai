@@ -1,0 +1,527 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101827">
+<title>ClearCue AI V1.0</title>
+<style>
+:root{--bg:#101827;--panel:#1b2940;--text:#f4f7fb;--muted:#aab8cc;--accent:#65d6bd;--line:#34445d}
+*{box-sizing:border-box}
+body{margin:0;padding:15px;background:var(--bg);color:var(--text);font-family:Arial,sans-serif}
+header{text-align:center;padding:20px 0}
+h1{color:var(--accent);margin:0;font-size:30px}
+header p,.muted{color:var(--muted)}
+main{max-width:900px;margin:auto}
+.panel{background:var(--panel);padding:17px;border-radius:13px;margin:14px 0}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:var(--bg);padding:13px;border-radius:9px;text-align:center}
+.stat strong{display:block;font-size:23px;color:var(--accent)}
+.stat span{font-size:12px;color:var(--muted)}
+textarea,input,select{width:100%;padding:12px;margin:6px 0 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:white;font-size:15px}
+textarea{min-height:100px}
+button{border:0;border-radius:8px;padding:11px 14px;margin:3px;background:var(--accent);color:#10221f;font-weight:bold;cursor:pointer}
+.secondary{background:#34445d;color:white}
+.danger{background:#a34455;color:white}
+.small{font-size:12px;padding:7px 10px}
+.task{background:var(--bg);padding:13px;border:1px solid var(--line);border-radius:10px;margin:10px 0}
+.task.done{opacity:.6}
+.task.done .task-title{text-decoration:line-through}
+.task-title{font-weight:bold;overflow-wrap:anywhere}
+.meta{font-size:12px;color:var(--muted);margin:7px 0}
+.tag{display:inline-block;background:#34445d;padding:4px 8px;border-radius:15px;font-size:11px;margin:3px}
+.alert{color:#ffd27a}
+.progress{height:9px;background:#34445d;border-radius:10px;overflow:hidden}
+.progress div{height:100%;background:var(--accent)}
+.actions{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.notice{padding:12px;border:1px solid var(--line);border-radius:9px;background:var(--bg);line-height:1.5}
+footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
+@media(max-width:480px){body{padding:9px}.panel{padding:13px}}
+</style>
+</head>
+<body>
+<header>
+<h1>ClearCue AI</h1>
+<p>Less confusion. More things done.</p>
+<span class="tag">V1.0 Release Candidate</span>
+</header>
+
+<main>
+<section class="panel">
+<h2>Your Dashboard</h2>
+<div class="stats">
+<div class="stat"><strong id="total">0</strong><span>Total tasks</span></div>
+<div class="stat"><strong id="pending">0</strong><span>Pending</span></div>
+<div class="stat"><strong id="completed">0</strong><span>Completed</span></div>
+</div>
+<p class="meta">Due today: <strong id="dueToday">0</strong> · Overdue: <strong id="overdue">0</strong></p>
+<p class="meta">Overall progress</p>
+<div class="progress"><div id="progressBar" style="width:0%"></div></div>
+<p id="progressText" class="meta">0% completed</p>
+</section>
+
+<section class="panel">
+<h2>Quick Capture</h2>
+<p class="muted">Paste a message or note. ClearCue will identify possible actions.</p>
+<textarea id="capture" maxlength="5000" placeholder="Please submit my application by Friday.&#10;Ke tshwanetse go duela sekoloto gompieno."></textarea>
+<button onclick="analyse()">Find my tasks</button>
+<div id="suggestions"></div>
+</section>
+
+<section class="panel">
+<h2>My Tasks</h2>
+<input id="search" maxlength="200" placeholder="Search tasks..." oninput="render()">
+<select id="categoryFilter" onchange="render()">
+<option value="All">All categories</option>
+<option>Education</option><option>Work</option><option>Personal</option>
+<option>Finance</option><option>Health</option><option>Other</option>
+</select>
+<select id="statusFilter" onchange="render()">
+<option value="All">All statuses</option>
+<option value="Pending">Pending</option>
+<option value="Completed">Completed</option>
+<option value="Uncertain">Needs review</option>
+<option value="Due">Due today</option>
+<option value="Overdue">Overdue</option>
+</select>
+<select id="sortBy" onchange="render()">
+<option value="newest">Newest first</option>
+<option value="priority">Priority</option>
+<option value="deadline">Earliest deadline</option>
+<option value="alphabetical">Alphabetical</option>
+</select>
+<div id="taskList"></div>
+<button class="secondary" onclick="clearCompleted()">Clear completed</button>
+</section>
+
+<section class="panel">
+<h2>Progress by Category</h2>
+<div id="categoryProgress"></div>
+</section>
+
+<section class="panel">
+<h2>Reminders</h2>
+<p id="permissionStatus" class="muted">Checking notification support...</p>
+<button onclick="requestPermission()">Enable browser notifications</button>
+<p class="meta">Reminders are checked while this app is open. Notifications are not guaranteed when the page is closed, the browser is suspended or the device is offline.</p>
+</section>
+
+<section class="panel">
+<h2>Backup and Restore</h2>
+<button onclick="exportBackup()">Export my tasks</button>
+<label class="muted" for="backupFile">Choose a ClearCue backup:</label>
+<input type="file" id="backupFile" accept=".json,application/json">
+<button onclick="importBackup()">Restore backup</button>
+<p id="backupStatus" class="meta"></p>
+</section>
+
+<section class="panel">
+<h2>Privacy and Data</h2>
+<div class="notice">
+<strong>About your information</strong>
+<p class="muted">This version stores tasks in your browser's local storage. It does not send task content to a ClearCue server.</p>
+<p class="muted">Local storage is not encrypted. Other people with access to your browser profile or device may be able to see your tasks.</p>
+<p class="muted">Avoid storing passwords, financial account details, identity numbers or other highly sensitive information.</p>
+<p class="muted">Backup files contain your task information. Keep them private.</p>
+</div>
+<button class="danger" onclick="deleteAll()">Delete all tasks</button>
+</section>
+
+<section class="panel">
+<h2>About ClearCue AI</h2>
+<p>ClearCue helps turn everyday messages and notes into organised action lists.</p>
+<p class="muted">This release candidate uses rule-based detection. It is not connected to a trained AI model or an external AI service.</p>
+<p class="muted">English and selected Setswana phrases are supported. Suggestions may be inaccurate, so review each task before saving.</p>
+<p class="tag">V1.0 Release Candidate</p>
+</section>
+</main>
+
+<footer>ClearCue AI · Less confusion. More things done.</footer>
+
+<script>
+"use strict";
+
+const KEY="clearcue_tasks_v10";
+const categories=["Education","Work","Personal","Finance","Health","Other"];
+let tasks=[];
+
+function validTask(t){
+ return t&&typeof t==="object"&&typeof t.text==="string"&&t.text.trim().length>0;
+}
+
+try{
+ let saved=localStorage.getItem(KEY);
+ if(!saved){
+  for(const oldKey of [
+   "clearcue_tasks_v015","clearcue_tasks_v014",
+   "clearcue_tasks_v013","clearcue_tasks_v012",
+   "clearcue_tasks_v011","clearcue_tasks_v010"
+  ]){
+   const old=localStorage.getItem(oldKey);
+   if(old){saved=old;break;}
+  }
+ }
+ if(saved){
+  const data=JSON.parse(saved);
+  if(Array.isArray(data)){
+   tasks=data.filter(validTask).map(t=>({
+    id:String(t.id||Date.now()+Math.random()),
+    text:t.text.trim().slice(0,5000),
+    category:categories.includes(t.category)?t.category:"Other",
+    deadline:typeof t.deadline==="string"?t.deadline:"",
+    date:typeof t.date==="string"?t.date:"",
+    time:typeof t.time==="string"?t.time:"",
+    priority:["High","Medium","Low"].includes(t.priority)?t.priority:"Medium",
+    language:t.language||"English",
+    uncertain:!!t.uncertain,
+    completed:!!t.completed,
+    reminderSent:!!t.reminderSent,
+    created:Number(t.created)||Date.now()
+   }));
+  }
+ }
+}catch(e){tasks=[];}
+
+function save(){
+ try{
+  localStorage.setItem(KEY,JSON.stringify(tasks));
+  render();
+ }catch(e){
+  alert("Could not save. Your browser storage may be full.");
+ }
+}
+
+function today(){
+ const d=new Date();
+ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+
+function deadlineDate(t){
+ if(t.date&&/^\d{4}-\d{2}-\d{2}$/.test(t.date))return t.date;
+ const phrase=(t.deadline||"").toLowerCase();
+ const d=new Date();
+ if(phrase==="today")return today();
+ if(phrase==="tomorrow")d.setDate(d.getDate()+1);
+ else{
+  const days=["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+  const target=days.indexOf(phrase);
+  if(target<0)return "";
+  let diff=(target-d.getDay()+7)%7;
+  if(diff===0)diff=7;
+  d.setDate(d.getDate()+diff);
+ }
+ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+
+function dueMoment(t){
+ const date=deadlineDate(t);
+ if(!date)return null;
+ const time=/^([01]\d|2[0-3]):[0-5]\d$/.test(t.time||"")?t.time:"23:59";
+ const moment=new Date(date+"T"+time+":00");
+ return Number.isNaN(moment.getTime())?null:moment;
+}
+
+function isDueToday(t){
+ return !t.completed&&deadlineDate(t)===today();
+}
+
+function isOverdue(t){
+ const moment=dueMoment(t);
+ return !t.completed&&moment!==null&&moment.getTime()<Date.now();
+}
+
+function getCategory(s){
+ if(/\b(application|school|university|lesson|study|exam|assignment|homework|teacher|revise|ithuta)\b/i.test(s))return "Education";
+ if(/\b(work|office|meeting|client|job|business|boss)\b/i.test(s))return "Work";
+ if(/\b(pay|bill|money|electricity|rent|bank|invoice|duela|sekoloto)\b/i.test(s))return "Finance";
+ if(/\b(doctor|medicine|hospital|health|appointment|clinic)\b/i.test(s))return "Health";
+ if(/\b(family|friend|home|personal|visit|collect)\b/i.test(s))return "Personal";
+ return "Other";
+}
+
+function getDeadline(s){
+ const patterns=[
+  [/\btoday\b|\bgompieno\b/i,"Today"],
+  [/\btomorrow\b|\bka moso\b/i,"Tomorrow"],
+  [/\bmonday\b|\bmantaga\b/i,"Monday"],
+  [/\btuesday\b|\blabobedi\b/i,"Tuesday"],
+  [/\bwednesday\b|\blaboraro\b/i,"Wednesday"],
+  [/\bthursday\b|\blabone\b/i,"Thursday"],
+  [/\bfriday\b|\blabotlhano\b/i,"Friday"],
+  [/\bsaturday\b|\bmatlhatso\b/i,"Saturday"],
+  [/\bsunday\b|\bsontaga\b/i,"Sunday"]
+ ];
+ for(const [pattern,value] of patterns)if(pattern.test(s))return value;
+ return "";
+}
+
+function analyse(){
+ const input=document.getElementById("capture").value.trim();
+ const area=document.getElementById("suggestions");
+ area.innerHTML="";
+ if(!input){area.textContent="Enter a message first.";return;}
+ const sentences=input.split(/[\n.!?]+/).map(s=>s.trim()).filter(Boolean);
+ const action=/\b(submit|send|pay|call|contact|attend|complete|finish|collect|prepare|buy|book|visit|study|revise|write|apply|register|renew|remember to|don't forget to)\b/i;
+ const setswana=/\b(ke tshwanetse go|re tshwanetse go|o tshwanetse go|ba tshwanetse go|gakologelwa go|duela|romela|ithuta|kwala|fetsa)\b/i;
+ const negative=/\b(don't|do not|doesn't|never|not yet|can't|cannot)\b/i;
+ const uncertain=/\b(might|maybe|may|possibly|could|perhaps)\b/i;
+ const found=sentences.filter(s=>(action.test(s)||setswana.test(s))&&!negative.test(s));
+ if(!found.length){area.textContent="No clear tasks detected. Try a more direct instruction.";return;}
+ found.forEach(s=>{
+  const card=document.createElement("div");
+  card.className="task";
+  const title=document.createElement("p");
+  title.textContent=s;
+  const info=document.createElement("p");
+  info.className="meta";
+  info.textContent=(setswana.test(s)?"Setswana":"English")+" · "+getCategory(s)+(uncertain.test(s)?" · Needs review":"");
+  const add=document.createElement("button");
+  add.textContent="Save task";
+  add.onclick=()=>{
+   tasks.push({
+    id:String(Date.now()+Math.random()),
+    text:s,
+    category:getCategory(s),
+    deadline:getDeadline(s),
+    date:"",
+    time:"",
+    priority:/\b(urgent|immediately|asap)\b/i.test(s)?"High":"Medium",
+    language:setswana.test(s)?"Setswana":"English",
+    uncertain:uncertain.test(s),
+    completed:false,
+    reminderSent:false,
+    created:Date.now()
+   });
+   save();
+   card.remove();
+  };
+  card.append(title,info,add);
+  area.appendChild(card);
+ });
+}
+
+function render(){
+ const total=tasks.length;
+ const completed=tasks.filter(t=>t.completed).length;
+ const pending=total-completed;
+ const due=tasks.filter(isDueToday).length;
+ const overdue=tasks.filter(isOverdue).length;
+
+ document.getElementById("total").textContent=total;
+ document.getElementById("pending").textContent=pending;
+ document.getElementById("completed").textContent=completed;
+ document.getElementById("dueToday").textContent=due;
+ document.getElementById("overdue").textContent=overdue;
+
+ const percent=total?Math.round(completed/total*100):0;
+ document.getElementById("progressBar").style.width=percent+"%";
+ document.getElementById("progressText").textContent=percent+"% completed";
+
+ const query=document.getElementById("search").value.toLowerCase();
+ const cat=document.getElementById("categoryFilter").value;
+ const status=document.getElementById("statusFilter").value;
+ const sort=document.getElementById("sortBy").value;
+
+ let list=tasks.filter(t=>{
+  if(!t.text.toLowerCase().includes(query))return false;
+  if(cat!=="All"&&t.category!==cat)return false;
+  if(status==="Pending"&&t.completed)return false;
+  if(status==="Completed"&&!t.completed)return false;
+  if(status==="Uncertain"&&!t.uncertain)return false;
+  if(status==="Due"&&!isDueToday(t))return false;
+  if(status==="Overdue"&&!isOverdue(t))return false;
+  return true;
+ });
+
+ if(sort==="priority"){
+  const rank={High:0,Medium:1,Low:2};
+  list.sort((a,b)=>rank[a.priority]-rank[b.priority]);
+ }else if(sort==="deadline"){
+  list.sort((a,b)=>(deadlineDate(a)||"9999").localeCompare(deadlineDate(b)||"9999"));
+ }else if(sort==="alphabetical"){
+  list.sort((a,b)=>a.text.localeCompare(b.text));
+ }else{
+  list.sort((a,b)=>b.created-a.created);
+ }
+
+ const taskList=document.getElementById("taskList");
+ taskList.innerHTML="";
+ if(!list.length){
+  taskList.textContent="No tasks match your search or filters.";
+ }
+
+ list.forEach(t=>{
+  const card=document.createElement("div");
+  card.className="task"+(t.completed?" done":"");
+
+  const title=document.createElement("div");
+  title.className="task-title";
+  title.textContent=t.text;
+
+  const meta=document.createElement("div");
+  meta.className="meta";
+  const dueText=deadlineDate(t);
+  meta.textContent=t.category+" · "+t.priority+
+   (dueText?" · Due: "+dueText:"")+
+   (t.time?" at "+t.time:"")+
+   (t.uncertain?" · Needs review":"")+
+   (t.completed?" · Completed":isOverdue(t)?" · OVERDUE":isDueToday(t)?" · Due today":"");
+
+  const actions=document.createElement("div");
+  actions.className="actions";
+
+  const complete=document.createElement("button");
+  complete.className="small";
+  complete.textContent=t.completed?"Mark pending":"Complete";
+  complete.onclick=()=>{t.completed=!t.completed;save();};
+
+  const edit=document.createElement("button");
+  edit.className="small secondary";
+  edit.textContent="Edit";
+  edit.onclick=()=>editTask(t.id);
+
+  const remove=document.createElement("button");
+  remove.className="small danger";
+  remove.textContent="Delete";
+  remove.onclick=()=>{
+   if(confirm("Delete this task?")){
+    tasks=tasks.filter(x=>x.id!==t.id);
+    save();
+   }
+  };
+
+  actions.append(complete,edit,remove);
+  card.append(title,meta,actions);
+  taskList.appendChild(card);
+ });
+
+ const categoryArea=document.getElementById("categoryProgress");
+ categoryArea.innerHTML="";
+ categories.forEach(c=>{
+  const group=tasks.filter(t=>t.category===c);
+  if(!group.length)return;
+  const done=group.filter(t=>t.completed).length;
+  const pct=Math.round(done/group.length*100);
+  const label=document.createElement("p");
+  label.className="meta";
+  label.textContent=c+": "+done+"/"+group.length+" completed ("+pct+"%)";
+  const bar=document.createElement("div");
+  bar.className="progress";
+  const fill=document.createElement("div");
+  fill.style.width=pct+"%";
+  bar.appendChild(fill);
+  categoryArea.append(label,bar);
+ });
+ if(!categoryArea.children.length)categoryArea.textContent="Your category progress will appear here.";
+}
+
+function editTask(id){
+ const t=tasks.find(x=>x.id===id);
+ if(!t)return;
+ const text=prompt("Edit task description:",t.text);
+ if(text===null)return;
+ if(!text.trim()){alert("Task description cannot be empty.");return;}
+ const category=prompt("Category (Education, Work, Personal, Finance, Health, Other):",t.category);
+ if(category===null)return;
+ const normalized=categories.find(c=>c.toLowerCase()===category.trim().toLowerCase());
+ if(!normalized){alert("Please enter a valid category.");return;}
+ const date=prompt("Deadline date (YYYY-MM-DD), or leave blank:",t.date||"");
+ if(date===null)return;
+ if(date&&!/^\d{4}-\d{2}-\d{2}$/.test(date)){alert("Use YYYY-MM-DD for the date.");return;}
+ const time=prompt("Reminder time (HH:MM, 24-hour), or leave blank:",t.time||"");
+ if(time===null)return;
+ if(time&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)){alert("Use HH:MM in 24-hour format.");return;}
+ const priority=prompt("Priority (High, Medium, Low):",t.priority);
+ if(priority===null)return;
+ const validPriority=["High","Medium","Low"].find(p=>p.toLowerCase()===priority.trim().toLowerCase());
+ if(!validPriority){alert("Please enter High, Medium or Low.");return;}
+ t.text=text.trim().slice(0,5000);
+ t.category=normalized;
+ t.date=date;
+ t.time=time;
+ t.priority=validPriority;
+ t.reminderSent=false;
+ save();
+}
+
+function clearCompleted(){
+ if(!tasks.some(t=>t.completed)){alert("There are no completed tasks.");return;}
+ if(confirm("Clear all completed tasks?")){
+  tasks=tasks.filter(t=>!t.completed);
+  save();
+ }
+}
+
+function deleteAll(){
+ if(!tasks.length){alert("There are no tasks to delete.");return;}
+ if(confirm("Delete ALL tasks? This cannot be undone unless you have a backup.")){
+  tasks=[];
+  save();
+ }
+}
+
+function exportBackup(){
+ const data={app:"ClearCue AI",version:"1.0",exportedAt:new Date().toISOString(),tasks};
+ const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+ const url=URL.createObjectURL(blob);
+ const a=document.createElement("a");
+ a.href=url;
+ a.download="clearcue-backup-v10.json";
+ document.body.appendChild(a);
+ a.click();
+ a.remove();
+ URL.revokeObjectURL(url);
+ document.getElementById("backupStatus").textContent="Backup exported.";
+}
+
+function importBackup(){
+ const file=document.getElementById("backupFile").files[0];
+ const status=document.getElementById("backupStatus");
+ if(!file){status.textContent="Choose a backup file first.";return;}
+ const reader=new FileReader();
+ reader.onload=()=>{
+  try{
+   const data=JSON.parse(reader.result);
+   if(data.app!=="ClearCue AI"||!Array.isArray(data.tasks)||!data.tasks.every(validTask)){
+    throw new Error("This is not a valid ClearCue backup.");
+   }
+   if(!confirm("Restore this backup? Your current task list will be replaced."))return;
+   tasks=data.tasks.map(t=>({
+    id:String(t.id||Date.now()+Math.random()),
+    text:t.text.trim().slice(0,5000),
+    category:categories.includes(t.category)?t.category:"Other",
+    deadline:typeof t.deadline==="string"?t.deadline:"",
+    date:typeof t.date==="string"?t.date:"",
+    time:typeof t.time==="string"?t.time:"",
+    priority:["High","Medium","Low"].includes(t.priority)?t.priority:"Medium",
+    language:t.language||"English",
+    uncertain:!!t.uncertain,
+    completed:!!t.completed,
+    reminderSent:false,
+    created:Number(t.created)||Date.now()
+   }));
+   save();
+   status.textContent="Backup restored successfully.";
+  }catch(e){
+   status.textContent="Could not restore backup: "+e.message;
+  }
+ };
+ reader.onerror=()=>{status.textContent="Could not read that file.";};
+ reader.readAsText(file);
+}
+
+function updatePermissionStatus(){
+ const el=document.getElementById("permissionStatus");
+ if(!("Notification" in window)){
+  el.textContent="This browser does not support notifications.";
+ }else{
+  el.textContent="Notification permission: "+Notification.permission;
+ }
+}
+
+async function requestPermission(){
+ if(!("Notification" in window)){
+  alert("Notifications are not supported by this browser.");
+  updatePermissionStatus();
+  r
